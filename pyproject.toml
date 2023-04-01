@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "pattern-recognition"
+version = "0.1.0"
+description = ""
+authors = ["Leonid Sidorov <leon.sidorov@gmail.com>"]
+readme = "README.md"
+packages = [{include = "pattern_recognition"}]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.12"
+torch = "^2.0.0"
+torch-geometric = "^2.3.0"
+mne = "^1.3.1"
+pandas = "^1.5.3"
+numpy = "^1.24.2"
+scipy = "^1.10.1"
+matplotlib = "^3.7.1"
+tqdm = "^4.65.0"
+networkx = "^3.0"
+scikit-learn = "^1.2.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
