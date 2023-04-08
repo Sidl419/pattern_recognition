@@ -1,5 +1,6 @@
 import numpy as np
 import time
+import os
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
@@ -13,6 +14,21 @@ from mne.decoding import Scaler
 import torch
 from torch import optim
 from torch.optim.lr_scheduler import StepLR
+from torch.distributed import init_process_group, destroy_process_group
+import torch.multiprocessing as mp
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
+
+
+def ddp_setup(rank: int, world_size: int):
+    """
+    Args:
+        rank: Unique identifier of each process
+        world_size: Total number of processes
+    """
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "12355"
+    init_process_group(backend="nccl", rank=rank, world_size=world_size)
 
 
 class P300Getter:
@@ -168,7 +184,7 @@ def get_cursor_data(info):
 def train_model(model, dataloaders, criterion, learning_params, device='cpu'):
     since = time.time()
 
-    optimizer = optim.Adam(model.parameters(), lr=learning_params['lr'], weight_decay=learning_params['weight_decay'])
+    optimizer = optim.AdamW(model.parameters(), lr=learning_params['lr'], weight_decay=learning_params['weight_decay'])
     scheduler = StepLR(optimizer, step_size=learning_params['step_size'], gamma=learning_params['gamma'])
     model = model.to(device)
 
