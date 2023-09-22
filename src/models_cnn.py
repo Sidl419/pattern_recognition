@@ -48,6 +48,7 @@ class FlexCNN(nn.Module):
 
         self.classifier_input_size = output_channels * output_feat_dim
         self.classifier = nn.Linear(self.classifier_input_size, num_classes, bias=True)
+        self.sig = nn.Sigmoid()
 
     def forward(self, x):
         x = self.act(self.conv(x))
@@ -55,13 +56,13 @@ class FlexCNN(nn.Module):
         x = self.body(x)
 
         x = self.hook(torch.flatten(x, 1))
-        x = self.classifier(x)
+        x = self.sig(self.classifier(x))
         
         return x
 
 
 class EEGNet(nn.Module):
-    def __init__(self, in_channels=64, sample_len=72, num_classes=2):
+    def __init__(self, sample_len=72, in_channels=64, num_classes=2):
         super(EEGNet, self).__init__()
         self.sample_len = sample_len
         self.in_channels = in_channels
@@ -85,6 +86,7 @@ class EEGNet(nn.Module):
         
         self.classifier_input_size = 72 // 24 * F2
         self.classifier = nn.Linear(self.classifier_input_size, num_classes, bias=True)
+        self.sig = nn.Sigmoid()
 
     def forward(self, x):
         x = torch.unsqueeze(x, 1)
@@ -101,23 +103,25 @@ class EEGNet(nn.Module):
         x = torch.flatten(self.pool2(x), 1)
         x = self.hook(x)
         
-        x = self.classifier(x)
+        x = self.sig(self.classifier(x))
         return x
 
 
 class CecottiCNN(nn.Module):
-    def __init__(self, input_feat_dim, n_channels=64, num_layers=2, num_classes=2):
+    def __init__(self, input_feat_dim, n_channels=64, num_layers=2, num_classes=2, num_fiters=10):
         super(CecottiCNN, self).__init__()
 
         self.num_layers = num_layers
         self.num_classes = num_classes
 
-        self.conv1 = nn.Conv1d(n_channels, 10, kernel_size=1)
-        self.conv2 = nn.Conv1d(10, 50, kernel_size=13, padding = 'same')
+        self.conv1 = nn.Conv1d(n_channels, num_fiters, kernel_size=1)
+        self.conv2 = nn.Conv1d(num_fiters, 5 * num_fiters, kernel_size=13, padding = 'same')
 
-        self.classifier_input_size = input_feat_dim * 50
+        self.classifier_input_size = input_feat_dim * 5 * num_fiters
         self.hook = nn.Linear(self.classifier_input_size, 100, bias=True)
         self.classifier = nn.Linear(100, num_classes, bias=True)
+
+        self.sig = nn.Sigmoid()
 
     def forward(self, x):
         x = scaled_tanh(self.conv1(x))
@@ -125,7 +129,7 @@ class CecottiCNN(nn.Module):
 
         x = torch.flatten(x, 1)
         x = self.hook(x)
-        x = self.classifier(x)
+        x = self.sig(self.classifier(x))
         
         return x
 
@@ -143,6 +147,7 @@ class BaseCNN(nn.Module):
 
         self.hook = nn.ReLU(True)
         self.linear_output = nn.Linear(input_feat_dim, num_classes, bias=True)
+        self.sig = nn.Sigmoid()
 
     def forward(self, x):
         x = self.linear_channel(x)
@@ -150,7 +155,7 @@ class BaseCNN(nn.Module):
         x = self.bn1(x)
         x = torch.flatten(x, 1)
         x = self.hook(x)
-        x = self.linear_output(x)
+        x = self.sig(self.linear_output(x))
         
         return x
 

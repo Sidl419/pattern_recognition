@@ -12,12 +12,19 @@ from mne.datasets import eegbci
 from mne.decoding import Scaler
 
 import torch
+from sklearn.metrics import f1_score  
 from torch import optim
 from torch.optim.lr_scheduler import StepLR
 from torch.distributed import init_process_group, destroy_process_group
 import torch.multiprocessing as mp
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
+
+from statsmodels.stats.proportion import proportion_confint 
+
+
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
 def ddp_setup(rank: int, world_size: int):
@@ -99,8 +106,9 @@ class P300Getter:
                 data = self.raw_data['Signal'][epoch_num].T
 
             res = []
+            bias = 24
             for i in idx:
-                res.append(data[:, i:i+self.sample_size])
+                res.append(data[:, i+bias:i+self.sample_size])
 
             if self.target_chars:
                 rows = (self.raw_data['StimulusCode'][epoch_num][idx] == self.row_dict[self.target_chars[epoch_num]]).astype(int)
@@ -124,6 +132,7 @@ class P300Getter:
 
     def unscale(self, X):
         return self.scaler.inverse_transform(X)
+
 
 def get_motor_subject(subject = 1):
     tmin, tmax = -1., 4.
@@ -181,15 +190,14 @@ def get_cursor_data(info):
     return X, y
 
 
-def train_model(model, dataloaders, criterion, learning_params, device='cpu'):
+def train_model(model, dataloaders, criterion, learning_params, device='cpu', log_rate=10):
     since = time.time()
 
     optimizer = optim.AdamW(model.parameters(), lr=learning_params['lr'], weight_decay=learning_params['weight_decay'])
     scheduler = StepLR(optimizer, step_size=learning_params['step_size'], gamma=learning_params['gamma'])
     model = model.to(device)
 
-    val_acc_history = []
-    val_loss_history = []
+    val_acc_history, val_loss_history, val_f1_history, val_bc_history = [], [], [], []
 
     for epoch in range(learning_params['num_epochs']):
         for phase in ['train', 'val']:
@@ -201,6 +209,7 @@ def train_model(model, dataloaders, criterion, learning_params, device='cpu'):
             running_loss = 0.0
             running_corrects = 0
             running_ones = 0
+            running_TP, running_TN, running_FP, running_FN = 0, 0, 0, 0
 
             for data in dataloaders[phase]:
                 if learning_params['model_type'] == 'GNN':
@@ -225,31 +234,55 @@ def train_model(model, dataloaders, criterion, learning_params, device='cpu'):
                 if phase == 'train':
                     loss.backward()
                     optimizer.step()
+
+                P = torch.sum(preds)
+                N = torch.sum(1 - preds)
+                TP = torch.sum(torch.masked_select(true_y, preds == 1))
+                TN = torch.sum(torch.masked_select(1 - true_y, preds == 0))
+                FP = P - TP
+                FN = N - TN
                 
                 running_loss += loss.item() * inputs_size
                 running_corrects += torch.sum(preds == true_y)
-                running_ones += torch.sum(preds)
+                running_ones += P
+                running_TP += TP
+                running_TN += TN
+                running_FP += FP
+                running_FN += FN
 
-            epoch_loss = running_loss / len(dataloaders[phase].dataset)
+            epoch_loss = running_loss / len(dataloaders[phase].dataset) 
             epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
             epoch_ones = running_ones.double() / (len(dataloaders[phase].dataset)  // dataloaders[phase].batch_size)
+            epoch_precision = running_TP.double() / (running_TP + running_FP)
+            epoch_recall = running_TP.double() / (running_TP + running_FN)
+            epoch_f1 = 2 * (epoch_precision * epoch_recall) / (epoch_precision + epoch_recall)
+            epoch_bc = (epoch_recall + running_TN.double() / (running_TN + running_FP)) / 2
 
-            if (epoch + 1) % 10 == 0:
+            min_acc, max_acc = proportion_confint(running_corrects.cpu(), len(dataloaders[phase].dataset))
+
+            if (epoch + 1) % log_rate == 0:
                 if phase == 'train':
                     print('Epoch {}/{}'.format(epoch, learning_params['num_epochs'] - 1))
-                    print('-' * 10)
-                print('{} Loss: {:.4f} Acc: {:.4f} Ones: {:.4f}'.format(phase, epoch_loss, epoch_acc, epoch_ones))
+                    print('-' * 150)
+                print('{}\t Loss: {:.4f}\t Min Acc: {:.4f}\t Acc: {:.4f}\t Max Acc: {:.4f}\t Balanced Acc: {:.4f}\t Positive: {:.4f}\t Precision: {:.4f}\t Recall: {:.4f}\t F1-score: {:.4f}\t'.format(phase, 
+                        epoch_loss, min_acc, epoch_acc, max_acc, epoch_bc, epoch_ones, epoch_precision, epoch_recall, epoch_f1))
 
             if phase == 'val':
                 val_acc_history.append(epoch_acc.cpu().data)
                 val_loss_history.append(epoch_loss)
+                val_f1_history.append(epoch_f1.cpu())
+                val_bc_history.append(epoch_bc.cpu())
 
         scheduler.step()
 
     time_elapsed = time.time() - since
     print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
 
-    return np.array(val_loss_history), np.array(val_acc_history), time_elapsed
+    acc = {'Accuracy': np.array(val_acc_history), 
+           'Balanced Accuracy': np.array(val_bc_history), 
+           'F1-score': np.array(val_f1_history)}
+
+    return np.array(val_loss_history), acc, time_elapsed
 
 
 def plot_sample(raw_dataset, signal_sample, info, is_mean=False):
@@ -288,7 +321,7 @@ def show_progress(loss, metric, loss_title, metric_title):
     plt.grid()
 
     plt.subplot(1, 2, 2)
-    plt.plot(np.arange(len(metric)), metric, 'b', linewidth=2)
+    plt.plot(np.arange(len(metric[metric_title])), metric[metric_title], 'b', linewidth=2)
 
     plt.xlabel('epoch', fontsize=14)
     plt.ylabel('criterion', fontsize=14)

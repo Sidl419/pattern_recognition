@@ -49,9 +49,10 @@ class FlexGCN(nn.Module):
 
 
 class BigGIN(nn.Module):
-    def __init__(self, in_features, out_features, hidden, eps=0.):
+    def __init__(self, in_features, out_features, hidden, adj, eps=0.):
         super(BigGIN, self).__init__()
         self.eps = eps
+        self.adj = adj
         #self.h = nn.Linear(in_features, out_features, bias=True)
         self.h = nn.Sequential(
                     nn.Linear(in_features, hidden, bias=True),
@@ -62,8 +63,8 @@ class BigGIN(nn.Module):
         #nn.Linear(hidden, out_features, bias=True),
         #nn.ReLU(True),
 
-    def forward(self, input, adj):
-        adj = adj + (1 + self.eps) * torch.eye(adj.shape[0], device=adj.device)
+    def forward(self, input, ):
+        adj = self.adj + (1 + self.eps) * torch.eye(self.adj.shape[0], device=input.device)
         output = torch.matmul(adj, input)
         output = self.h(output)
         return output
@@ -95,12 +96,12 @@ class TemporalConv(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, padding=1):
         super(TemporalConv, self).__init__()
         self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size, padding=padding)
-        self.batch_norm = nn.BatchNorm1d(out_channels)
+        #self.batch_norm = nn.BatchNorm1d(out_channels)
 
     def forward(self, x):
         x = F.relu(x + self.conv1(x))
-        output = self.batch_norm(x)
-        return output
+        #output = self.batch_norm(x)
+        return x
 
 
 class STGCN_block(nn.Module):
@@ -112,17 +113,19 @@ class STGCN_block(nn.Module):
         self.gc = BigGIN(in_channels, in_channels, in_channels // 4)
         self.temp2 = TemporalConv(num_nodes, num_nodes)
         self.batch_norm = nn.BatchNorm1d(num_nodes)
+        self.drop = nn.Dropout(p=0.5, inplace=False)
 
     def forward(self, x):
         x = self.temp1(x)
         x = self.gc(x, self.adj)
-        output = self.temp2(x)
-        output =  self.batch_norm(x)
+        x = self.temp2(x)
+        x = self.batch_norm(x)
+        output = self.drop(x)
         return output
 
 
 class STGCN(nn.Module):
-    def __init__(self, adj, in_channels=42, num_nodes=64, num_classes=1):
+    def __init__(self, in_channels, num_nodes, adj, num_classes=2):
         super(STGCN, self).__init__()
 
         self.block1 = STGCN_block(adj, in_channels, num_nodes)
@@ -131,6 +134,7 @@ class STGCN(nn.Module):
         self.temp = TemporalConv(num_nodes, num_nodes)
         self.hook = nn.Identity()
         self.classifier = nn.Linear(in_channels * num_nodes, num_classes, bias=True)
+        self.sig = nn.Sigmoid()
 
     def forward(self, x):
         x = self.block1(x)
@@ -139,7 +143,7 @@ class STGCN(nn.Module):
         x = self.temp(x)
 
         x = self.hook(torch.flatten(x, 1))
-        x = self.classifier(x)
+        x = self.sig(self.classifier(x))
 
         return x
 
@@ -150,21 +154,24 @@ class BaseGNN(nn.Module):
 
         self.num_classes = num_classes
 
-        self.gc = SmallGIN(input_feat_dim, input_feat_dim, adj)
+        self.gc = SmallGIN(input_feat_dim, input_feat_dim, adj, 10)
         self.linear_channel = nn.Conv1d(n_channels, channel_filters, kernel_size=1, bias=True)
         self.conv = nn.Conv1d(channel_filters, 1, kernel_size=time_kernel, padding='same')
-        self.bn1 = nn.BatchNorm1d(1)
+        self.bn1 = nn.BatchNorm1d(64)
+        self.bn2 = nn.BatchNorm1d(1)
         self.hook = nn.ReLU(True)
         self.linear_output = nn.Linear(input_feat_dim, num_classes, bias=True)
+        self.sig = nn.Sigmoid()
 
     def forward(self, x):
         x = self.gc(x)
+        x = self.bn1(x)
         x = self.linear_channel(x)
         x = self.conv(x)
-        x = self.bn1(x)
+        x = self.bn2(x)
         x = torch.flatten(x, 1)
         x = self.hook(x)
-        x = self.linear_output(x)
+        x = self.sig(self.linear_output(x))
         
         return x
     
@@ -184,6 +191,7 @@ class BaseGNNBig(nn.Module):
         self.bn1 = nn.BatchNorm1d(1)
         self.hook = nn.ReLU(True)
         self.linear_output = nn.Linear(input_feat_dim, num_classes, bias=True)
+        self.sig = nn.Sigmoid()
 
     def forward(self, x):
         x = self.gc1(x)
@@ -193,6 +201,6 @@ class BaseGNNBig(nn.Module):
         x = self.bn1(x)
         x = torch.flatten(x, 1)
         x = self.hook(x)
-        x = self.linear_output(x)
+        x = self.sig(self.linear_output(x))
         
         return x
