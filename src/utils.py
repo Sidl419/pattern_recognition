@@ -190,7 +190,7 @@ def get_cursor_data(info):
     return X, y
 
 
-def train_model(model, dataloaders, criterion, learning_params, device='cpu', log_rate=10):
+def train_model(model, dataloaders, criterion, learning_params, is_binary=True, device='cpu', log_rate=10):
     since = time.time()
 
     optimizer = optim.AdamW(model.parameters(), lr=learning_params['lr'], weight_decay=learning_params['weight_decay'])
@@ -208,8 +208,9 @@ def train_model(model, dataloaders, criterion, learning_params, device='cpu', lo
 
             running_loss = 0.0
             running_corrects = 0
-            running_ones = 0
-            running_TP, running_TN, running_FP, running_FN = 0, 0, 0, 0
+            if is_binary:
+                running_ones = 0
+                running_TP, running_TN, running_FP, running_FN = 0, 0, 0, 0
 
             for data in dataloaders[phase]:
                 if learning_params['model_type'] == 'GNN':
@@ -226,7 +227,6 @@ def train_model(model, dataloaders, criterion, learning_params, device='cpu', lo
                 optimizer.zero_grad()
 
                 outputs = model(inputs)
-                
                 loss = criterion(outputs, labels)
                 _, preds = torch.max(outputs, 1)
                 _, true_y = torch.max(labels.data, 1)
@@ -235,28 +235,33 @@ def train_model(model, dataloaders, criterion, learning_params, device='cpu', lo
                     loss.backward()
                     optimizer.step()
 
-                P = torch.sum(preds)
-                N = torch.sum(1 - preds)
-                TP = torch.sum(torch.masked_select(true_y, preds == 1))
-                TN = torch.sum(torch.masked_select(1 - true_y, preds == 0))
-                FP = P - TP
-                FN = N - TN
+                if is_binary:
+                    P = torch.sum(preds)
+                    N = torch.sum(1 - preds)
+                    TP = torch.sum(torch.masked_select(true_y, preds == 1))
+                    TN = torch.sum(torch.masked_select(1 - true_y, preds == 0))
+                    FP = P - TP
+                    FN = N - TN
                 
                 running_loss += loss.item() * inputs_size
                 running_corrects += torch.sum(preds == true_y)
-                running_ones += P
-                running_TP += TP
-                running_TN += TN
-                running_FP += FP
-                running_FN += FN
+
+                if is_binary:
+                    running_ones += P
+                    running_TP += TP
+                    running_TN += TN
+                    running_FP += FP
+                    running_FN += FN
 
             epoch_loss = running_loss / len(dataloaders[phase].dataset) 
             epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
-            epoch_ones = running_ones.double() / (len(dataloaders[phase].dataset)  // dataloaders[phase].batch_size)
-            epoch_precision = running_TP.double() / (running_TP + running_FP)
-            epoch_recall = running_TP.double() / (running_TP + running_FN)
-            epoch_f1 = 2 * (epoch_precision * epoch_recall) / (epoch_precision + epoch_recall)
-            epoch_bc = (epoch_recall + running_TN.double() / (running_TN + running_FP)) / 2
+
+            if is_binary:
+                epoch_ones = running_ones.double() / (len(dataloaders[phase].dataset)  // dataloaders[phase].batch_size)
+                epoch_precision = running_TP.double() / (running_TP + running_FP)
+                epoch_recall = running_TP.double() / (running_TP + running_FN)
+                epoch_f1 = 2 * (epoch_precision * epoch_recall) / (epoch_precision + epoch_recall)
+                epoch_bc = (epoch_recall + running_TN.double() / (running_TN + running_FP)) / 2
 
             min_acc, max_acc = proportion_confint(running_corrects.cpu(), len(dataloaders[phase].dataset))
 
@@ -264,23 +269,30 @@ def train_model(model, dataloaders, criterion, learning_params, device='cpu', lo
                 if phase == 'train':
                     print('Epoch {}/{}'.format(epoch, learning_params['num_epochs'] - 1))
                     print('-' * 150)
-                print('{}\t Loss: {:.4f}\t Min Acc: {:.4f}\t Acc: {:.4f}\t Max Acc: {:.4f}\t Balanced Acc: {:.4f}\t Positive: {:.4f}\t Precision: {:.4f}\t Recall: {:.4f}\t F1-score: {:.4f}\t'.format(phase, 
-                        epoch_loss, min_acc, epoch_acc, max_acc, epoch_bc, epoch_ones, epoch_precision, epoch_recall, epoch_f1))
+                if is_binary:
+                    print('{}\t Loss: {:.4f}\t Min Acc: {:.4f}\t Acc: {:.4f}\t Max Acc: {:.4f}\t Balanced Acc: {:.4f}\t Positive: {:.4f}\t Precision: {:.4f}\t Recall: {:.4f}\t F1-score: {:.4f}\t'.format(phase, 
+                            epoch_loss, min_acc, epoch_acc, max_acc, epoch_bc, epoch_ones, epoch_precision, epoch_recall, epoch_f1))
+                else:
+                    print('{}\t Loss: {:.4f}\t Min Acc: {:.4f}\t Acc: {:.4f}\t Max Acc: {:.4f}\t'.format(phase, epoch_loss, min_acc, epoch_acc, max_acc))
 
             if phase == 'val':
                 val_acc_history.append(epoch_acc.cpu().data)
                 val_loss_history.append(epoch_loss)
-                val_f1_history.append(epoch_f1.cpu())
-                val_bc_history.append(epoch_bc.cpu())
+                if is_binary:
+                    val_f1_history.append(epoch_f1.cpu())
+                    val_bc_history.append(epoch_bc.cpu())
 
         scheduler.step()
 
     time_elapsed = time.time() - since
     print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
 
-    acc = {'Accuracy': np.array(val_acc_history), 
-           'Balanced Accuracy': np.array(val_bc_history), 
-           'F1-score': np.array(val_f1_history)}
+    if is_binary:
+        acc = {'Accuracy': np.array(val_acc_history), 
+            'Balanced Accuracy': np.array(val_bc_history), 
+            'F1-score': np.array(val_f1_history)}
+    else:
+        acc = {'Accuracy': np.array(val_acc_history)}
 
     return np.array(val_loss_history), acc, time_elapsed
 

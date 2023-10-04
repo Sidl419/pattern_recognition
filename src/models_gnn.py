@@ -154,14 +154,14 @@ class BaseGNN(nn.Module):
 
         self.num_classes = num_classes
 
-        self.gc = SmallGIN(input_feat_dim, input_feat_dim, adj, 10)
+        self.gc = SmallGIN(input_feat_dim, input_feat_dim, adj)
         self.linear_channel = nn.Conv1d(n_channels, channel_filters, kernel_size=1, bias=True)
         self.conv = nn.Conv1d(channel_filters, 1, kernel_size=time_kernel, padding='same')
-        self.bn1 = nn.BatchNorm1d(64)
+        self.bn1 = nn.BatchNorm1d(n_channels)
         self.bn2 = nn.BatchNorm1d(1)
         self.hook = nn.ReLU(True)
         self.linear_output = nn.Linear(input_feat_dim, num_classes, bias=True)
-        self.sig = nn.Sigmoid()
+        self.sig = nn.Softmax(dim=1)
 
     def forward(self, x):
         x = self.gc(x)
@@ -171,6 +171,7 @@ class BaseGNN(nn.Module):
         x = self.bn2(x)
         x = torch.flatten(x, 1)
         x = self.hook(x)
+        #print(self.linear_output(x).size())
         x = self.sig(self.linear_output(x))
         
         return x

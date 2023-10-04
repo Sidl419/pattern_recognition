@@ -147,7 +147,7 @@ class BaseCNN(nn.Module):
 
         self.hook = nn.ReLU(True)
         self.linear_output = nn.Linear(input_feat_dim, num_classes, bias=True)
-        self.sig = nn.Sigmoid()
+        self.sig = nn.Softmax()
 
     def forward(self, x):
         x = self.linear_channel(x)
