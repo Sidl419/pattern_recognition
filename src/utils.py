@@ -198,6 +198,7 @@ def train_model(model, dataloaders, criterion, learning_params, is_binary=True, 
     model = model.to(device)
 
     val_acc_history, val_loss_history, val_f1_history, val_bc_history = [], [], [], []
+    val_min_acc_history, val_max_acc_history = [], []
 
     for epoch in range(learning_params['num_epochs']):
         for phase in ['train', 'val']:
@@ -278,6 +279,8 @@ def train_model(model, dataloaders, criterion, learning_params, is_binary=True, 
             if phase == 'val':
                 val_acc_history.append(epoch_acc.cpu().data)
                 val_loss_history.append(epoch_loss)
+                val_min_acc_history.append(min_acc)
+                val_max_acc_history.append(max_acc)
                 if is_binary:
                     val_f1_history.append(epoch_f1.cpu())
                     val_bc_history.append(epoch_bc.cpu())
@@ -289,10 +292,14 @@ def train_model(model, dataloaders, criterion, learning_params, is_binary=True, 
 
     if is_binary:
         acc = {'Accuracy': np.array(val_acc_history), 
-            'Balanced Accuracy': np.array(val_bc_history), 
-            'F1-score': np.array(val_f1_history)}
+               'Min Accuracy': np.array(val_min_acc_history),
+               'Max Accuracy': np.array(val_max_acc_history),
+               'Balanced Accuracy': np.array(val_bc_history), 
+               'F1-score': np.array(val_f1_history)}
     else:
-        acc = {'Accuracy': np.array(val_acc_history)}
+        acc = {'Accuracy': np.array(val_acc_history), 
+               'Min Accuracy': np.array(val_min_acc_history),
+               'Max Accuracy': np.array(val_max_acc_history),}
 
     return np.array(val_loss_history), acc, time_elapsed
 

@@ -171,7 +171,6 @@ class BaseGNN(nn.Module):
         x = self.bn2(x)
         x = torch.flatten(x, 1)
         x = self.hook(x)
-        #print(self.linear_output(x).size())
         x = self.sig(self.linear_output(x))
         
         return x
