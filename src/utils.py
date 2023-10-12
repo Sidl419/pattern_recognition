@@ -20,7 +20,8 @@ import torch.multiprocessing as mp
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from statsmodels.stats.proportion import proportion_confint 
+from statsmodels.stats.proportion import proportion_confint
+from statsmodels.stats.contingency_tables import mcnemar 
 
 
 def count_parameters(model):
@@ -350,3 +351,47 @@ def show_progress(loss, metric, loss_title, metric_title):
 
     plt.grid()
     plt.show()
+
+
+def paired_proportions_exact_test(preds_a, preds_b, targets):
+    preds_a = preds_a == targets
+    preds_b = preds_b == targets
+
+    a = sum((preds_a == 1) & (preds_b == 1))
+    b = sum((preds_a == 1) & (preds_b == 0))
+    c = sum((preds_a == 0) & (preds_b == 1))
+    d = sum((preds_a == 0) & (preds_b == 0))
+    print([[a, b], [c, d]])
+
+    return mcnemar([[a, b], [c, d]], exact=True).pvalue
+
+
+def inference_model(model, dataloaders, device='cpu', model_type='CNN'):
+    model = model.to(device)
+    model.eval()
+
+    all_preds = []
+    running_corrects = 0
+
+    for data in dataloaders['val']:
+        if model_type == 'GNN':
+            inputs = data.to(device)
+            labels = data.y.to(device)
+            inputs_size = inputs.x.size(0)
+        elif model_type == 'CNN':
+            inputs = data[0].to(device)
+            labels = data[1].to(device)
+            inputs_size = inputs.size(0)
+        else:
+            raise ValueError(f"no such model type: {model_type}")
+
+        with torch.no_grad():
+            outputs = model(inputs)
+            _, preds = torch.max(outputs, 1)
+            _, true_y = torch.max(labels.data, 1)
+
+        all_preds.append(preds)
+        running_corrects += torch.sum(preds == true_y)
+
+    #min_acc, max_acc = proportion_confint(running_corrects.cpu(), len(dataloaders['val'].dataset))
+    return torch.cat(all_preds).cpu()
