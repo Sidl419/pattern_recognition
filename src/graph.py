@@ -72,3 +72,17 @@ def get_neighbors_graph(eloc, n_neighbors=9, picture=False):
         plot_graph(G)
 
     return nx.adjacency_matrix(G)
+
+
+def get_pos_init_graph(eloc, delta=0.0025):
+    positions = eloc.get_positions()['ch_pos']
+    points = np.stack(list(positions.values()))
+
+    matrix = np.zeros((len(points), len(points)))
+
+    for i, point_i in enumerate(points):
+        for j, point_j in enumerate(points):
+            # np.power(point_i - point_j, 2).sum()
+            matrix[i,j] = np.clip(delta / np.power(point_i - point_j + 1e-5, 2).sum(), 0.1, 1)
+
+    return matrix
