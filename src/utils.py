@@ -21,7 +21,9 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 from statsmodels.stats.proportion import proportion_confint
-from statsmodels.stats.contingency_tables import mcnemar 
+from statsmodels.stats.contingency_tables import mcnemar
+
+from losses import GraphLoss
 
 
 def count_parameters(model):
@@ -191,7 +193,7 @@ def get_cursor_data(info):
     return X, y
 
 
-def train_model(model, dataloaders, criterion, learning_params, is_binary=True, device='cpu', log_rate=10):
+def train_model(model, dataloaders, criterion, learning_params, is_binary=True, device='cpu', log_rate=None):
     since = time.time()
 
     optimizer = optim.AdamW(model.parameters(), lr=learning_params['lr'], weight_decay=learning_params['weight_decay'])
@@ -227,9 +229,13 @@ def train_model(model, dataloaders, criterion, learning_params, is_binary=True, 
                     raise ValueError(f"no such model type: {learning_params['model_type']}")
 
                 optimizer.zero_grad()
+                if isinstance(criterion, GraphLoss):
+                    outputs, adj = model(inputs)
+                    loss = criterion(outputs, adj, labels, inputs)
+                else:
+                    outputs = model(inputs)
+                    loss = criterion(outputs, labels)
 
-                outputs = model(inputs)
-                loss = criterion(outputs, labels)
                 _, preds = torch.max(outputs, 1)
                 _, true_y = torch.max(labels.data, 1)
 
@@ -267,7 +273,7 @@ def train_model(model, dataloaders, criterion, learning_params, is_binary=True, 
 
             min_acc, max_acc = proportion_confint(running_corrects.cpu(), len(dataloaders[phase].dataset))
 
-            if (epoch + 1) % log_rate == 0:
+            if (log_rate is not None) and (epoch + 1) % log_rate == 0:
                 if phase == 'train':
                     print('Epoch {}/{}'.format(epoch, learning_params['num_epochs'] - 1))
                     print('-' * 150)

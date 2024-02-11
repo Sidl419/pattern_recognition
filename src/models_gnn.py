@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import math
 from torch.nn import functional as F
 from torch_geometric.nn import TopKPooling, GINConv, Sequential
 from torch_geometric.nn import global_mean_pool as gap, global_max_pool as gmp
@@ -205,3 +206,176 @@ class BaseGNNBig(nn.Module):
         x = self.sig(self.linear_output(x))
         
         return x
+    
+class GIN(nn.Module):
+    def __init__(self, in_features, out_features, eps=0.):
+        super(GIN, self).__init__()
+        self.eps = eps
+        self.h = nn.Linear(in_features, out_features, bias=True)
+
+    def forward(self, input, adj):
+        adj = adj + (1 + self.eps) * torch.eye(adj.shape[1], device=input.device)
+        output = torch.matmul(adj, input)
+        output = self.h(output)
+        return output
+
+class EdgeLearnGNN(nn.Module):
+    def __init__(self, input_feat_dim, n_channels, time_kernel=13, num_classes=2, channel_filters=1):
+        super(EdgeLearnGNN, self).__init__()
+
+        self.num_classes = num_classes
+        #self.adj = nn.Parameter(data=torch.empty(n_channels, n_channels), requires_grad=True)
+        self.w = torch.empty(input_feat_dim)
+        k = math.sqrt(1 / input_feat_dim)
+        nn.init.uniform_(self.w, -k, k)
+        self.w = nn.Parameter(data=self.w, requires_grad=True)
+
+        self.gc = GIN(input_feat_dim, input_feat_dim)
+        self.linear_channel = nn.Conv1d(n_channels, channel_filters, kernel_size=1, bias=True)
+        self.conv = nn.Conv1d(channel_filters, 1, kernel_size=time_kernel, padding='same')
+        self.bn1 = nn.BatchNorm1d(n_channels)
+        self.bn2 = nn.BatchNorm1d(1)
+        self.hook = nn.ReLU(True)
+        self.linear_output = nn.Linear(input_feat_dim, num_classes, bias=True)
+        self.sig = nn.Softmax(dim=1)
+
+    def forward(self, x):
+        # [16, 64, 48]
+        self.adj = ((x.unsqueeze(2) - x.unsqueeze(1)).abs() @ self.w)
+        self.adj = -F.relu(self.adj)
+        self.adj = F.softmax(self.adj, dim=1)
+
+        x = self.gc(x, self.adj)
+        x = self.bn1(x)
+        x = self.linear_channel(x)
+        x = self.conv(x)
+        x = self.bn2(x)
+        x = torch.flatten(x, 1)
+        x = self.hook(x)
+        x = self.sig(self.linear_output(x))
+        
+        return x, self.adj
+
+
+class PriorEdgeLearnGNN(nn.Module):
+    def __init__(self, input_feat_dim, n_channels, prior, time_kernel=13, num_classes=2, channel_filters=1):
+        super(PriorEdgeLearnGNN, self).__init__()
+
+        self.num_classes = num_classes
+        self.prior = prior
+        #self.adj = nn.Parameter(data=torch.empty(n_channels, n_channels), requires_grad=True)
+        self.w = torch.empty(input_feat_dim)
+        k = math.sqrt(1 / input_feat_dim)
+        nn.init.uniform_(self.w, -k, k)
+        self.w = nn.Parameter(data=self.w, requires_grad=True)
+
+        self.gc = GIN(input_feat_dim, input_feat_dim)
+        self.linear_channel = nn.Conv1d(n_channels, channel_filters, kernel_size=1, bias=True)
+        self.conv = nn.Conv1d(channel_filters, 1, kernel_size=time_kernel, padding='same')
+        self.bn1 = nn.BatchNorm1d(n_channels)
+        self.bn2 = nn.BatchNorm1d(1)
+        self.hook = nn.ReLU(True)
+        self.linear_output = nn.Linear(input_feat_dim, num_classes, bias=True)
+        self.sig = nn.Softmax(dim=1)
+
+    def forward(self, x):
+        self.adj = ((x.unsqueeze(2) - x.unsqueeze(1)).abs() @ self.w)
+        self.adj = torch.exp(-F.relu(self.adj)) * self.prior
+        self.adj = self.adj / self.adj.sum(dim=1, keepdim=True)
+
+        x = self.gc(x, self.adj)
+        x = self.bn1(x)
+        x = self.linear_channel(x)
+        x = self.conv(x)
+        x = self.bn2(x)
+        x = torch.flatten(x, 1)
+        x = self.hook(x)
+        x = self.sig(self.linear_output(x))
+        
+        return x, self.adj
+
+
+class PairEdgeLearnGNN(nn.Module):
+    def __init__(self, input_feat_dim, n_channels, time_kernel=13, num_classes=2, channel_filters=1):
+        super(PairEdgeLearnGNN, self).__init__()
+
+        self.num_classes = num_classes
+        #self.adj = nn.Parameter(data=torch.empty(n_channels, n_channels), requires_grad=True)
+        self.w1 = torch.empty(input_feat_dim, input_feat_dim)
+        self.w2 = torch.empty(input_feat_dim, input_feat_dim)
+
+        k = math.sqrt(1 / input_feat_dim)
+        nn.init.uniform_(self.w1, -k, k)
+        nn.init.uniform_(self.w2, -k, k)
+
+        self.w1 = nn.Parameter(data=self.w1, requires_grad=True)
+        self.w2 = nn.Parameter(data=self.w2, requires_grad=True)
+
+        self.gc = GIN(input_feat_dim, input_feat_dim)
+        self.linear_channel = nn.Conv1d(n_channels, channel_filters, kernel_size=1, bias=True)
+        self.conv = nn.Conv1d(channel_filters, 1, kernel_size=time_kernel, padding='same')
+        self.bn1 = nn.BatchNorm1d(n_channels)
+        self.bn2 = nn.BatchNorm1d(1)
+        self.hook = nn.ReLU(True)
+        self.linear_output = nn.Linear(input_feat_dim, num_classes, bias=True)
+        self.sig = nn.Softmax(dim=1)
+
+    def forward(self, x):
+        self.adj = (x @ self.w1).unsqueeze(2) * (x @ self.w2).unsqueeze(1)
+        self.adj = F.softmax(self.adj.sum(dim=-1), dim=1)
+
+        x = self.gc(x, self.adj)
+        x = self.bn1(x)
+        x = self.linear_channel(x)
+        x = self.conv(x)
+        x = self.bn2(x)
+        x = torch.flatten(x, 1)
+        x = self.hook(x)
+        x = self.sig(self.linear_output(x))
+        
+        return x, self.adj
+
+
+class PairEdgeReluLearnGNN(nn.Module):
+    def __init__(self, input_feat_dim, n_channels, time_kernel=13, num_classes=2, channel_filters=1):
+        super(PairEdgeReluLearnGNN, self).__init__()
+
+        self.num_classes = num_classes
+        #self.adj = nn.Parameter(data=torch.empty(n_channels, n_channels), requires_grad=True)
+        self.w1 = torch.empty(input_feat_dim, input_feat_dim)
+        self.w2 = torch.empty(input_feat_dim, input_feat_dim)
+        self.b = torch.empty(1)
+
+        k = math.sqrt(1 / input_feat_dim)
+        nn.init.uniform_(self.w1, -k, k)
+        nn.init.uniform_(self.w2, -k, k)
+        nn.init.uniform_(self.b, -k, k)
+
+        self.w1 = nn.Parameter(data=self.w1, requires_grad=True)
+        self.w2 = nn.Parameter(data=self.w2, requires_grad=True)
+        self.b = nn.Parameter(data=self.b, requires_grad=True)
+
+        self.gc = GIN(input_feat_dim, input_feat_dim)
+        self.linear_channel = nn.Conv1d(n_channels, channel_filters, kernel_size=1, bias=True)
+        self.conv = nn.Conv1d(channel_filters, 1, kernel_size=time_kernel, padding='same')
+        self.bn1 = nn.BatchNorm1d(n_channels)
+        self.bn2 = nn.BatchNorm1d(1)
+        self.hook = nn.ReLU(True)
+        self.linear_output = nn.Linear(input_feat_dim, num_classes, bias=True)
+        self.sig = nn.Softmax(dim=1)
+
+    def forward(self, x):
+        self.adj = (x @ self.w1).unsqueeze(2) * (x @ self.w2).unsqueeze(1)
+        self.adj = F.relu(torch.pow(self.adj.sum(dim=-1) + self.b, 2))
+        self.adj = self.adj / self.adj.sum(dim=1, keepdim=True)
+
+        x = self.gc(x, self.adj)
+        x = self.bn1(x)
+        x = self.linear_channel(x)
+        x = self.conv(x)
+        x = self.bn2(x)
+        x = torch.flatten(x, 1)
+        x = self.hook(x)
+        x = self.sig(self.linear_output(x))
+        
+        return x, self.adj

@@ -74,8 +74,9 @@ class CNNMatrixDataset(Dataset):
             x = self.transform(x)
 
         if self.with_target:
-            y = self.tensors[1][index].reshape(-1, )
-            y = y.unsqueeze(1) == torch.arange(0, self.num_classes)
+            y = self.tensors[1][index]
+            if self.num_classes == 2:
+                y = y.reshape(-1, ).unsqueeze(1) == torch.arange(0, self.num_classes)
             y = y.float().squeeze()
             return x, y
         else:
