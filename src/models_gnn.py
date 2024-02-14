@@ -304,7 +304,7 @@ class PairEdgeLearnGNN(nn.Module):
         self.w1 = torch.empty(input_feat_dim, input_feat_dim)
         self.w2 = torch.empty(input_feat_dim, input_feat_dim)
 
-        k = math.sqrt(1 / input_feat_dim)
+        k = math.sqrt(1 / (input_feat_dim * input_feat_dim))
         nn.init.uniform_(self.w1, -k, k)
         nn.init.uniform_(self.w2, -k, k)
 
@@ -346,7 +346,7 @@ class PairEdgeReluLearnGNN(nn.Module):
         self.w2 = torch.empty(input_feat_dim, input_feat_dim)
         self.b = torch.empty(1)
 
-        k = math.sqrt(1 / input_feat_dim)
+        k = math.sqrt(1 / (input_feat_dim * input_feat_dim))
         nn.init.uniform_(self.w1, -k, k)
         nn.init.uniform_(self.w2, -k, k)
         nn.init.uniform_(self.b, -k, k)
