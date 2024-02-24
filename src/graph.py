@@ -82,7 +82,6 @@ def get_pos_init_graph(eloc, delta=0.0025):
 
     for i, point_i in enumerate(points):
         for j, point_j in enumerate(points):
-            # np.power(point_i - point_j, 2).sum()
             matrix[i,j] = np.clip(delta / np.power(point_i - point_j + 1e-5, 2).sum(), 0.1, 1)
 
     return matrix
