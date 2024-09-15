@@ -193,6 +193,54 @@ def get_cursor_data(info):
     return X, y
 
 
+def validate_model(model, dataloader, is_binary=True, device='cpu'):
+    model = model.to(device)
+    model.eval()
+
+    running_corrects = 0
+    if is_binary:
+        running_TP, running_TN, running_FP, running_FN = 0, 0, 0, 0
+
+    for data in dataloader:
+        inputs = data[0].to(device)
+        labels = data[1].to(device)
+        inputs_size = inputs.size(0)
+        outputs = model(inputs)
+
+        _, preds = torch.max(outputs, 1)
+        _, true_y = torch.max(labels.data, 1)
+
+        if is_binary:
+            P = torch.sum(preds)
+            N = torch.sum(1 - preds)
+            TP = torch.sum(torch.masked_select(true_y, preds == 1))
+            TN = torch.sum(torch.masked_select(1 - true_y, preds == 0))
+            FP = P - TP
+            FN = N - TN
+
+        running_corrects += torch.sum(preds == true_y)
+        if is_binary:
+            running_TP += TP
+            running_TN += TN
+            running_FP += FP
+            running_FN += FN
+
+    acc = running_corrects.double() / len(dataloader.dataset)
+
+    if is_binary:
+        precision = running_TP.double() / (running_TP + running_FP) if running_TP + running_FP != 0 else torch.tensor(0)
+        recall = running_TP.double() / (running_TP + running_FN) if running_TP + running_FN != 0 else torch.tensor(0)
+        f1 = (2 * (precision * recall) / (precision + recall)) if precision + recall != 0 else torch.tensor(0)
+        bc = (recall + running_TN.double() / (running_TN + running_FP)) / 2
+
+    min_acc, max_acc = proportion_confint(running_corrects.cpu(), len(dataloader.dataset), 0.05)
+    acc = {'Accuracy': acc.cpu().data, 'Corrects': running_corrects.cpu().data, 'Min Accuracy': min_acc, 'Max Accuracy': max_acc}
+    if is_binary:
+        acc['Balanced Accuracy'] = bc
+        acc['F1-score'] = f1
+    return acc
+
+
 def train_model(model, dataloaders, criterion, learning_params, is_binary=True, device='cpu', log_rate=None):
     since = time.time()
 
@@ -200,7 +248,7 @@ def train_model(model, dataloaders, criterion, learning_params, is_binary=True, 
     scheduler = StepLR(optimizer, step_size=learning_params['step_size'], gamma=learning_params['gamma'])
     model = model.to(device)
 
-    val_acc_history, val_loss_history, val_f1_history, val_bc_history = [], [], [], []
+    val_corrects_history, val_acc_history, val_loss_history, val_f1_history, val_bc_history = [], [], [], [], []
     val_min_acc_history, val_max_acc_history = [], []
 
     for epoch in range(learning_params['num_epochs']):
@@ -266,12 +314,12 @@ def train_model(model, dataloaders, criterion, learning_params, is_binary=True, 
 
             if is_binary:
                 epoch_ones = running_ones.double() / (len(dataloaders[phase].dataset)  // dataloaders[phase].batch_size)
-                epoch_precision = running_TP.double() / (running_TP + running_FP)
-                epoch_recall = running_TP.double() / (running_TP + running_FN)
-                epoch_f1 = 2 * (epoch_precision * epoch_recall) / (epoch_precision + epoch_recall)
+                epoch_precision = running_TP.double() / (running_TP + running_FP) if running_TP + running_FP != 0 else torch.tensor(0)
+                epoch_recall = running_TP.double() / (running_TP + running_FN) if running_TP + running_FN != 0 else torch.tensor(0)
+                epoch_f1 = (2 * (epoch_precision * epoch_recall) / (epoch_precision + epoch_recall)) if epoch_precision + epoch_recall != 0 else torch.tensor(0)
                 epoch_bc = (epoch_recall + running_TN.double() / (running_TN + running_FP)) / 2
 
-            min_acc, max_acc = proportion_confint(running_corrects.cpu(), len(dataloaders[phase].dataset))
+            min_acc, max_acc = proportion_confint(running_corrects.cpu(), len(dataloaders[phase].dataset), 0.05)
 
             if (log_rate is not None) and (epoch + 1) % log_rate == 0:
                 if phase == 'train':
@@ -285,6 +333,7 @@ def train_model(model, dataloaders, criterion, learning_params, is_binary=True, 
 
             if phase == 'val':
                 val_acc_history.append(epoch_acc.cpu().data)
+                val_corrects_history.append(running_corrects.cpu().data)
                 val_loss_history.append(epoch_loss)
                 val_min_acc_history.append(min_acc)
                 val_max_acc_history.append(max_acc)
@@ -298,13 +347,15 @@ def train_model(model, dataloaders, criterion, learning_params, is_binary=True, 
     print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
 
     if is_binary:
-        acc = {'Accuracy': np.array(val_acc_history), 
+        acc = {'Accuracy': np.array(val_acc_history),
+               'Corrects': np.array(val_corrects_history),
                'Min Accuracy': np.array(val_min_acc_history),
                'Max Accuracy': np.array(val_max_acc_history),
                'Balanced Accuracy': np.array(val_bc_history), 
                'F1-score': np.array(val_f1_history)}
     else:
-        acc = {'Accuracy': np.array(val_acc_history), 
+        acc = {'Accuracy': np.array(val_acc_history),
+               'Corrects': np.array(val_corrects_history),
                'Min Accuracy': np.array(val_min_acc_history),
                'Max Accuracy': np.array(val_max_acc_history),}
 
@@ -372,14 +423,12 @@ def paired_proportions_exact_test(preds_a, preds_b, targets):
     return mcnemar([[a, b], [c, d]], exact=True).pvalue
 
 
-def inference_model(model, dataloaders, device='cpu', model_type='CNN'):
+def infer_model(model, dataloader, channel=None, device='cpu', model_type='CNN'):
     model = model.to(device)
     model.eval()
-
     all_preds = []
-    running_corrects = 0
 
-    for data in dataloaders['val']:
+    for data in dataloader:
         if model_type == 'GNN':
             inputs = data.to(device)
             labels = data.y.to(device)
@@ -392,12 +441,10 @@ def inference_model(model, dataloaders, device='cpu', model_type='CNN'):
             raise ValueError(f"no such model type: {model_type}")
 
         with torch.no_grad():
+            if channel is not None:
+                inputs = inputs[:, channel].unsqueeze(1)
             outputs = model(inputs)
-            _, preds = torch.max(outputs, 1)
-            _, true_y = torch.max(labels.data, 1)
+            #_, preds = torch.max(outputs, 1)
 
-        all_preds.append(preds)
-        running_corrects += torch.sum(preds == true_y)
-
-    #min_acc, max_acc = proportion_confint(running_corrects.cpu(), len(dataloaders['val'].dataset))
+        all_preds.append(outputs)
     return torch.cat(all_preds).cpu()

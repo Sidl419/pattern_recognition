@@ -2,5 +2,6 @@ matrix_dataset
 .ipynb_checkpoints
 __pycache__
 Preprocessed_EEG
+processed_data_multi_data
 .*
 China_information.xlsx
