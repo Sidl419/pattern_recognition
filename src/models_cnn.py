@@ -141,13 +141,13 @@ class BaseCNN(nn.Module):
         self.num_classes = num_classes
 
         self.linear_channel = nn.Conv1d(n_channels, channel_filters, kernel_size=1, bias=True)
-        self.conv = nn.Conv1d(channel_filters, 1, kernel_size=time_kernel, padding='same')
+        self.conv = nn.Conv1d(channel_filters, 1, kernel_size=time_kernel, padding=6)
         self.bn1 = nn.BatchNorm1d(1)
         self.drop1 = nn.Dropout(p=0.5, inplace=False)
 
         self.hook = nn.ReLU(True)
         self.linear_output = nn.Linear(input_feat_dim, num_classes, bias=True)
-        self.sig = nn.Softmax()
+        self.sig = nn.Sigmoid()
 
     def forward(self, x):
         x = self.linear_channel(x)
@@ -220,4 +220,118 @@ class BaseCNNAttn(nn.Module):
         x = self.sig(self.linear_output(x))
         
         return x
-    
+
+
+class EEGNet(nn.Module):
+    def __init__(self, input_feat_dim=128, in_channels=64, num_classes=2, F1=8, D=2, F2=16, dropout=0.5):
+        super(EEGNet, self).__init__()
+
+        # First temporal convolution
+        self.temporal_conv = nn.Conv2d(1, F1, (1, 64), padding=(0, 32), bias=False)
+        self.batch_norm1 = nn.BatchNorm2d(F1)
+
+        # Depthwise spatial convolution
+        self.depthwise_conv = nn.Conv2d(F1, F1 * D, (in_channels, 1), groups=F1, bias=False)
+        self.batch_norm2 = nn.BatchNorm2d(F1 * D)
+        self.elu = nn.ELU()
+        self.avgpool1 = nn.AvgPool2d((1, 4))
+        self.dropout1 = nn.Dropout(dropout)
+
+        # Separable convolution
+        self.separable_conv = nn.Conv2d(F1 * D, F2, (1, 16), padding=(0, 8), bias=False)
+        self.batch_norm3 = nn.BatchNorm2d(F2)
+        self.avgpool2 = nn.AvgPool2d((1, 8))
+        self.dropout2 = nn.Dropout(dropout)
+
+        # Classification layer
+        self.classifier = nn.Linear(F2 * ((input_feat_dim // 32)), num_classes)
+
+    def forward(self, x):
+        # x shape: (batch, channels, samples)
+        x = x.unsqueeze(1)  # (batch, 1, channels, samples)
+
+        x = self.temporal_conv(x)
+        x = self.batch_norm1(x)
+
+        x = self.depthwise_conv(x)
+        x = self.batch_norm2(x)
+        x = self.elu(x)
+        x = self.avgpool1(x)
+        x = self.dropout1(x)
+
+        x = self.separable_conv(x)
+        x = self.batch_norm3(x)
+        x = self.elu(x)
+        x = self.avgpool2(x)
+        x = self.dropout2(x)
+
+        x = torch.flatten(x, start_dim=1)
+        x = self.classifier(x)
+        return x
+
+
+class DeepConvNet(nn.Module):
+    def __init__(self, input_feat_dim=128, in_channels=64, num_classes=2):
+        super(DeepConvNet, self).__init__()
+
+        # First conv block
+        self.block1 = nn.Sequential(
+            nn.Conv2d(1, 25, (1, 5), padding=(0, 2), bias=False),
+            nn.Conv2d(25, 25, (in_channels, 1), bias=False),
+            nn.BatchNorm2d(25),
+            nn.ELU(),
+            nn.MaxPool2d((1, 2)),
+            nn.Dropout(0.5)
+        )
+
+        # Second conv block
+        self.block2 = nn.Sequential(
+            nn.Conv2d(25, 50, (1, 5), padding=(0, 2), bias=False),
+            nn.BatchNorm2d(50),
+            nn.ELU(),
+            nn.MaxPool2d((1, 2)),
+            nn.Dropout(0.5)
+        )
+
+        # Third conv block
+        self.block3 = nn.Sequential(
+            nn.Conv2d(50, 100, (1, 5), padding=(0, 2), bias=False),
+            nn.BatchNorm2d(100),
+            nn.ELU(),
+            nn.MaxPool2d((1, 2)),
+            nn.Dropout(0.5)
+        )
+
+        # Fourth conv block
+        self.block4 = nn.Sequential(
+            nn.Conv2d(100, 200, (1, 5), padding=(0, 2), bias=False),
+            nn.BatchNorm2d(200),
+            nn.ELU(),
+            nn.MaxPool2d((1, 2)),
+            nn.Dropout(0.5)
+        )
+
+        # Flatten and classify
+        # Compute flattened feature size after pooling (assuming input_feat_dim input length)
+        def feature_size(input_feat_dim):
+            for _ in range(4):
+                input_feat_dim = (input_feat_dim + 2*2 - 5) + 1  # conv 5 kernel size, pad 2
+                input_feat_dim = input_feat_dim // 2  # maxpool with kernel 2, stride 2
+            return input_feat_dim
+
+        self.feature_len = feature_size(input_feat_dim) * 200
+
+        self.classifier = nn.Linear(self.feature_len, num_classes)
+
+    def forward(self, x):
+        # x shape: (batch, channels, samples)
+        x = x.unsqueeze(1)  # (batch, 1, channels, samples)
+
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.block3(x)
+        x = self.block4(x)
+
+        x = x.view(x.size(0), -1)
+        x = self.classifier(x)
+        return x

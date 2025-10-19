@@ -109,7 +109,7 @@ class P300Getter:
                 data = self.raw_data['Signal'][epoch_num].T
 
             res = []
-            bias = 24
+            bias = 0
             for i in idx:
                 res.append(data[:, i+bias:i+self.sample_size])
 
@@ -234,10 +234,10 @@ def validate_model(model, dataloader, is_binary=True, device='cpu'):
         bc = (recall + running_TN.double() / (running_TN + running_FP)) / 2
 
     min_acc, max_acc = proportion_confint(running_corrects.cpu(), len(dataloader.dataset), 0.05)
-    acc = {'Accuracy': acc.cpu().data, 'Corrects': running_corrects.cpu().data, 'Min Accuracy': min_acc, 'Max Accuracy': max_acc}
+    acc = {'Accuracy': acc.cpu().item(), 'Corrects': running_corrects.cpu().item(), 'Min Accuracy': min_acc, 'Max Accuracy': max_acc}
     if is_binary:
         acc['Balanced Accuracy'] = bc
-        acc['F1-score'] = f1
+        acc['F1-score'] = f1.cpu().item()
     return acc
 
 
@@ -383,30 +383,19 @@ def plot_sample(raw_dataset, signal_sample, info, is_mean=False):
 
 
 def show_progress(loss, metric, loss_title, metric_title):
-    fig, ax = plt.subplots(1, 2)
-    fig.set_figwidth(15)
-
-    plt.subplot(1, 2, 1)
-    plt.plot(np.arange(len(loss)), loss, 'r', linewidth=2)
-
-    plt.xlabel('epoch', fontsize=14)
-    plt.ylabel('mean loss', fontsize=14)
-    plt.yticks(fontsize=12)
-    plt.xticks(fontsize=12)
-    plt.title(loss_title, fontsize=14)
+    plt.figure(figsize=(10, 6))
+    epochs = np.arange(len(loss))
     
-    plt.grid()
-
-    plt.subplot(1, 2, 2)
-    plt.plot(np.arange(len(metric[metric_title])), metric[metric_title], 'b', linewidth=2)
-
-    plt.xlabel('epoch', fontsize=14)
-    plt.ylabel('criterion', fontsize=14)
+    plt.plot(epochs, loss, 'r-', linewidth=2, label=loss_title)
+    plt.plot(epochs, metric[metric_title], 'b-', linewidth=2, label=metric_title)
+    
+    plt.xlabel('Epoch', fontsize=14)
+    plt.ylabel('Value', fontsize=14)
     plt.yticks(fontsize=12)
     plt.xticks(fontsize=12)
-    plt.title(metric_title, fontsize=14)
-
-    plt.grid()
+    plt.title(f"{loss_title} & {metric_title} over Epochs", fontsize=16)
+    plt.grid(True)
+    plt.legend(fontsize=12)
     plt.show()
 
 
