@@ -28,6 +28,7 @@ visualtorch = "^0.2.4"
 onnx = "^1.18.0"
 onnxscript = "^0.3.2"
 pkg = "^0.2"
+setuptools = "^80.9.0"
 
 
 [build-system]
