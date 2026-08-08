@@ -231,10 +231,67 @@ Training never owns presentation; reporting never builds datasets/models.
 
 ## Colab
 
-- Install package from repo (`pip install -e .` or `pip install git+...`).
-- Point config `data.params.path` / `output_dir` at Drive mounts or uploaded paths.
-- Use `"device": "cuda"` on GPU runtimes or `"auto"`.
-- Same JSON + `run_experiment` API as local.
+Same JSON + `run_experiment` API as local. Typical first cells:
+
+```python
+# 1) Install from GitHub (or upload the repo and pip install -e .)
+!pip install -q "git+https://github.com/<user>/pattern_recognition.git"
+
+# Or, if the repo is already cloned / Drive-mounted:
+# %cd /content/drive/MyDrive/pattern_recognition
+# !pip install -q -e .
+
+# 2) Mount Drive if data / results live there
+from google.colab import drive
+drive.mount("/content/drive")
+
+# 3) Run an experiment (inline config or load a JSON from Drive)
+from pattern_recognition.experiment import run_experiment
+
+config = {
+    "name": "colab_samara_eegnet_sc",
+    "seed": 42,
+    "device": "cuda",  # or "auto" / "cpu"
+    "data": {
+        "pipeline": "SamaraWithinSubjectAverage",
+        "params": {
+            "path": "/content/drive/MyDrive/Samara_data/",
+            "channel_idx": 1,
+            "n_average": 10,
+            "mode": "SC",
+        },
+    },
+    "model": {
+        "name": "EEGNet",
+        "params": {"n_channels": 1, "input_feat_dim": 250},
+    },
+    "train": {
+        "lr": 1e-4,
+        "weight_decay": 1e-2,
+        "batch_size": 64,
+        "num_epochs": 50,
+        "step_size": 20,
+        "gamma": 0.5,
+        "save_model": True,
+    },
+    "output_dir": "/content/drive/MyDrive/pattern_recognition_results/",
+}
+
+run_dir = run_experiment(config)
+
+# 4) Tables / plots from saved artifacts
+from pattern_recognition.reporting import load_run, plot_training_curves
+run = load_run(run_dir)
+print(run.metrics)  # includes device_requested / device_resolved
+plot_training_curves(run)
+```
+
+Notes:
+
+- Point `data.params.path` / `output_dir` at Drive mounts or `/content/...` uploads.
+- Use `"device": "cuda"` on GPU runtimes (fails clearly if the runtime has no GPU); `"auto"` is fine too.
+- The example notebook under `notebooks/examples/` should include a short “Colab” section with these cells (adapted to the real repo URL).
+
 
 ## Errors
 
