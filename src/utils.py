@@ -26,6 +26,22 @@ from statsmodels.stats.contingency_tables import mcnemar
 from losses import GraphLoss
 
 
+def compute_itr(accuracy, n_classes=2):
+    """
+    Wolpaw's Information Transfer Rate (bits/trial).
+    ITR = log2(N) + P*log2(P) + (1-P)*log2((1-P)/(N-1))
+    where N = number of classes, P = accuracy in [0, 1].
+    """
+    P = float(accuracy)
+    N = int(n_classes)
+    if P <= 0 or P >= 1:
+        P = np.clip(P, 1e-10, 1 - 1e-10)
+    if N <= 1:
+        return 0.0
+    itr = np.log2(N) + P * np.log2(P) + (1 - P) * np.log2((1 - P) / (N - 1))
+    return float(itr)
+
+
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
@@ -234,14 +250,16 @@ def validate_model(model, dataloader, is_binary=True, device='cpu'):
         bc = (recall + running_TN.double() / (running_TN + running_FP)) / 2
 
     min_acc, max_acc = proportion_confint(running_corrects.cpu(), len(dataloader.dataset), 0.05)
-    acc = {'Accuracy': acc.cpu().item(), 'Corrects': running_corrects.cpu().item(), 'Min Accuracy': min_acc, 'Max Accuracy': max_acc}
+    acc_val = acc.cpu().item()
+    acc = {'Accuracy': acc_val, 'Corrects': running_corrects.cpu().item(), 'Min Accuracy': min_acc, 'Max Accuracy': max_acc}
     if is_binary:
         acc['Balanced Accuracy'] = bc
         acc['F1-score'] = f1.cpu().item()
+        acc['ITR'] = compute_itr(acc_val, n_classes=2)
     return acc
 
 
-def train_model(model, dataloaders, criterion, learning_params, is_binary=True, device='cpu', log_rate=None):
+def train_model(model, dataloaders, criterion, learning_params, is_binary=True, device='cpu', log_rate=None, val_rate=1):
     since = time.time()
 
     optimizer = optim.AdamW(model.parameters(), lr=learning_params['lr'], weight_decay=learning_params['weight_decay'])
@@ -250,9 +268,11 @@ def train_model(model, dataloaders, criterion, learning_params, is_binary=True, 
 
     val_corrects_history, val_acc_history, val_loss_history, val_f1_history, val_bc_history = [], [], [], [], []
     val_min_acc_history, val_max_acc_history = [], []
+    val_itr_history = []
 
     for epoch in range(learning_params['num_epochs']):
-        for phase in ['train', 'val']:
+        do_val = (val_rate <= 1) or ((epoch + 1) % val_rate == 0) or (epoch == learning_params['num_epochs'] - 1)
+        for phase in (['train', 'val'] if do_val else ['train']):
             if phase == 'train':
                 model.train()
             else:
@@ -321,13 +341,15 @@ def train_model(model, dataloaders, criterion, learning_params, is_binary=True, 
 
             min_acc, max_acc = proportion_confint(running_corrects.cpu(), len(dataloaders[phase].dataset), 0.05)
 
+            epoch_itr = compute_itr(epoch_acc.cpu().item(), n_classes=2) if is_binary else 0.0
+
             if (log_rate is not None) and (epoch + 1) % log_rate == 0:
                 if phase == 'train':
                     print('Epoch {}/{}'.format(epoch, learning_params['num_epochs'] - 1))
                     print('-' * 150)
                 if is_binary:
-                    print('{}\t Loss: {:.4f}\t Min Acc: {:.4f}\t Acc: {:.4f}\t Max Acc: {:.4f}\t Balanced Acc: {:.4f}\t Positive: {:.4f}\t Precision: {:.4f}\t Recall: {:.4f}\t F1-score: {:.4f}\t'.format(phase, 
-                            epoch_loss, min_acc, epoch_acc, max_acc, epoch_bc, epoch_ones, epoch_precision, epoch_recall, epoch_f1))
+                    print('{}\t Loss: {:.4f}\t Min Acc: {:.4f}\t Acc: {:.4f}\t Max Acc: {:.4f}\t Balanced Acc: {:.4f}\t Positive: {:.4f}\t Precision: {:.4f}\t Recall: {:.4f}\t ITR: {:.4f}\t'.format(phase, 
+                            epoch_loss, min_acc, epoch_acc, max_acc, epoch_bc, epoch_ones, epoch_precision, epoch_recall, epoch_itr))
                 else:
                     print('{}\t Loss: {:.4f}\t Min Acc: {:.4f}\t Acc: {:.4f}\t Max Acc: {:.4f}\t'.format(phase, epoch_loss, min_acc, epoch_acc, max_acc))
 
@@ -340,6 +362,7 @@ def train_model(model, dataloaders, criterion, learning_params, is_binary=True, 
                 if is_binary:
                     val_f1_history.append(epoch_f1.cpu())
                     val_bc_history.append(epoch_bc.cpu())
+                    val_itr_history.append(epoch_itr)
 
         scheduler.step()
 
@@ -352,7 +375,8 @@ def train_model(model, dataloaders, criterion, learning_params, is_binary=True, 
                'Min Accuracy': np.array(val_min_acc_history),
                'Max Accuracy': np.array(val_max_acc_history),
                'Balanced Accuracy': np.array(val_bc_history), 
-               'F1-score': np.array(val_f1_history)}
+               'F1-score': np.array(val_f1_history),
+               'ITR': np.array(val_itr_history)}
     else:
         acc = {'Accuracy': np.array(val_acc_history),
                'Corrects': np.array(val_corrects_history),
