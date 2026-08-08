@@ -12,6 +12,7 @@
 4. Save reproducible run artifacts; support plots/tables via a reporting module that reads those artifacts.
 5. Keep Google Colab usable (`pip install -e .` / git install + path config).
 6. Show the new workflow with at least one example notebook (existing notebooks may be cleaned or left as historical artifacts).
+7. Rewrite README as a research entry point: datasets, experiment setups, metrics, and how to run.
 
 ## Non-goals (v1)
 
@@ -370,12 +371,65 @@ No full notebook execution in CI.
 5. Add pytest format/unit tests + example configs.
 6. Add one example notebook demonstrating config → run → reporting (and optionally clean imports on selected existing notebooks).
 7. Update `pyproject.toml` / `.gitignore` (`results/`); remove obsolete `src/`.
-8. Document Colab + local usage in README briefly.
+8. Rewrite README so a newcomer can understand the research and how to run it (see **README content** below).
+
+## README content
+
+Replace the current one-liner README with a research-oriented overview. Target reader: someone new to the repo who should understand *what* is studied, *on which data*, *how experiments are set up*, and *how results are measured* — then be able to run a config locally or on Colab.
+
+### Required sections
+
+1. **Project overview**  
+   Two parallel research tracks:
+   - **GNN track** — multi-channel EEG as a graph (electrode topology + geometric DL); BCI III P300 (64 ch) and SEED emotion recognition.
+   - **Epoch-averaging track** (v1 runner focus) — raise SNR by averaging trials; Pz / MC–SC; CNN + SVM baselines on Samara and BCI III.
+
+2. **Datasets** (what / where / how to get)
+
+   | Dataset | Task | Typical use in this repo | Location / source |
+   |---|---|---|---|
+   | BCI Competition III, dataset II | P300 speller | GNN 64-ch; epoch-average Pz (Subjects A/B) | [bbci.de](https://www.bbci.de/competition/iii/#top); `raw_data/` |
+   | Samara multi-EEG (S0201…S2001) | P300 classic / Aperture B | Epoch averaging, time-shift | `Samara_data/` (and `processed_data/` CSVs) |
+   | SEED | 3-class emotion | GNN notebooks | documented path in SEED notebooks |
+
+   Note channel/time conventions briefly (e.g. Samara Pz, 250 samples @ 250 Hz; BCI III 64 ch, 72 samples @ 120 Hz after pipeline).
+
+3. **Experiment setups** (basic recipes a reader can map to configs)
+
+   - Within-subject epoch averaging (N=5/10), modes **MC** (N epochs → N channels) vs **SC** (average → 1 channel).
+   - Cross-subject / mixed / K-trials protocols (point to pipelines or historical notebooks).
+   - Time-shifted multi-channel windows (`SamaraTimeShift`).
+   - BCI III Pz epoch-average validation (`BCI3PzEpochAverage`).
+   - GNN static graphs (Delaunay / k-NN / prior) vs edge-learning models — described for context; runner support is not v1.
+
+   Link each setup to an example JSON under `configs/` and/or the example notebook.
+
+4. **Models**  
+   Short list: CNN baselines (`EEGNet`, `BaseCNN`, …), SVM (where used), GNN family (`BaseGNN`, `EdgeLearnGNN`, …) with a one-line role each.
+
+5. **Metrics**  
+   What is reported and why:
+   - Accuracy (+ CI where used)
+   - Balanced accuracy (class imbalance on P300)
+   - F1
+   - ITR (Wolpaw, bits/trial) via `compute_itr`
+   - Device fields in run artifacts (`device_requested`, `device_resolved`)
+   - How to compare runs: `metrics_table` / `compare_runs`
+
+6. **Quickstart**  
+   Local: `poetry install` / `pip install -e .`, run one config, open results.  
+   Colab: shortened version of the Colab section (install, Drive paths, `run_experiment`, comparison).
+
+7. **Repo map**  
+   `pattern_recognition/`, `configs/`, `notebooks/examples/`, historical `notebooks/` + `multi_eeg_notebooks/`, `results/`, `docs/`.
+
+Keep the README factual and scannable (tables > long prose). Detailed design stays in `docs/superpowers/specs/`; the README is the research entry point.
 
 ## Success criteria
 
 - `poetry install` / editable install exposes `pattern_recognition`.
 - At least one real-shaped example config runs the epoch-averaging CNN path and writes artifacts including `device_resolved`.
 - Format tests pass for config + metrics contracts.
-- At least one example notebook demonstrates the new run + reporting flow.
+- At least one example notebook demonstrates the new run + reporting flow (including metrics comparison).
 - New data technique can be added by a new pipeline class + registry entry only.
+- README covers overview, datasets, basic experiment setups, models, metrics, and local/Colab quickstart so a newcomer can understand the research without reading notebooks first.
