@@ -1,0 +1,31 @@
+{
+  "name": "samara_pz_eegnet_sc_n10",
+  "seed": 42,
+  "device": "auto",
+  "data": {
+    "pipeline": "SamaraWithinSubjectAverage",
+    "params": {
+      "path": "Samara_data/",
+      "channel_idx": 1,
+      "n_average": 10,
+      "mode": "SC"
+    }
+  },
+  "model": {
+    "name": "EEGNet",
+    "params": {
+      "n_channels": 1,
+      "input_feat_dim": 250
+    }
+  },
+  "train": {
+    "lr": 0.0001,
+    "weight_decay": 0.01,
+    "batch_size": 64,
+    "num_epochs": 50,
+    "step_size": 20,
+    "gamma": 0.5,
+    "save_model": true
+  },
+  "output_dir": "results/"
+}
