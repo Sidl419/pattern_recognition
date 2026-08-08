@@ -72,7 +72,7 @@ tests/                   # pytest: schema/format, registry, unit, optional smoke
 
 ### Style / revision rules
 
-- Relative imports inside the package; no `from utils import ...`.
+- Absolute package imports (`from pattern_recognition...`); never flat `src` names like `from utils import ...`. Do not use relative-dot imports (`from ..training...`) inside the package.
 - Type hints on public APIs; docstrings on pipelines and runner entrypoints.
 - Split kitchen-sink `utils.py` into `data/`, `training/`, `metrics`.
 - Deduplicate near-identical `CNNMatrixDataset` / `EEGDataset` only if behavior stays identical.
