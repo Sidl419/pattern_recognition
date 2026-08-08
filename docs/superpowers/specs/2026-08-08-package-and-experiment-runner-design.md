@@ -225,6 +225,39 @@ run_experiment(config_dict_or_path)
 - `metrics_table(run_dirs)` → comparison table (DataFrame / CSV / markdown)  
 - `plot_training_curves(run)` / `compare_runs(run_dirs)` → figures  
 
+**Example — single run:**
+
+```python
+from pattern_recognition.reporting import load_run, plot_training_curves
+
+run = load_run("results/samara_pz_eegnet_sc_n10_20260808_120000/")
+print(run.metrics)  # accuracy, F1, balanced accuracy, ITR, device_* , ...
+plot_training_curves(run)
+```
+
+**Example — metrics comparison across runs:**
+
+```python
+from pathlib import Path
+from pattern_recognition.reporting import metrics_table, compare_runs
+
+run_dirs = sorted(Path("results/").glob("samara_pz_*"))
+# or explicit list:
+# run_dirs = [
+#     "results/samara_pz_eegnet_sc_n10_...",
+#     "results/samara_pz_basecnn_sc_n10_...",
+# ]
+
+table = metrics_table(run_dirs)
+print(table)                    # DataFrame: one row per run
+table.to_csv("results/compare_samara.csv", index=False)
+print(table.to_markdown(index=False))  # for notebooks / reports
+
+compare_runs(run_dirs)          # side-by-side training curves / metric bars
+```
+
+`metrics_table` columns include at least: `name`, `device_resolved`, accuracy, balanced accuracy, F1, ITR, training time, plus identifying config fields useful for comparison (`model.name`, `data.pipeline`, key `data.params` such as `mode` / `n_average` when present).
+
 v1 ships the Python API (`load_run`, `metrics_table`, plot helpers). A reporting CLI (`summarize`) is out of scope for v1.
 
 Training never owns presentation; reporting never builds datasets/models.
@@ -279,18 +312,32 @@ config = {
 
 run_dir = run_experiment(config)
 
-# 4) Tables / plots from saved artifacts
-from pattern_recognition.reporting import load_run, plot_training_curves
+# 4) Tables / plots from saved artifacts (single run)
+from pattern_recognition.reporting import (
+    load_run,
+    plot_training_curves,
+    metrics_table,
+    compare_runs,
+)
+
 run = load_run(run_dir)
 print(run.metrics)  # includes device_requested / device_resolved
 plot_training_curves(run)
+
+# 5) Metrics comparison (after 2+ runs, e.g. EEGNet vs BaseCNN)
+from pathlib import Path
+
+run_dirs = sorted(Path("/content/drive/MyDrive/pattern_recognition_results/").glob("*"))
+table = metrics_table(run_dirs)
+display(table)  # Colab-friendly
+compare_runs(run_dirs)
 ```
 
 Notes:
 
 - Point `data.params.path` / `output_dir` at Drive mounts or `/content/...` uploads.
 - Use `"device": "cuda"` on GPU runtimes (fails clearly if the runtime has no GPU); `"auto"` is fine too.
-- The example notebook under `notebooks/examples/` should include a short “Colab” section with these cells.
+- The example notebook under `notebooks/examples/` should include a short “Colab” section with these cells, including a metrics-comparison cell after multiple runs.
 
 
 ## Errors
