@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-08  
 **Status:** Draft for user review  
-**Scope:** Installable `pattern_recognition` package, code-style cleanup, config-driven experiment runner (epoch-averaging / CNN track), reporting helpers, format tests. Notebook import cells updated without clearing outputs.
+**Scope:** Installable `pattern_recognition` package, code-style cleanup, config-driven experiment runner (epoch-averaging / CNN track), reporting helpers, format tests. Demonstrate usage via one new example notebook and/or cleaned imports in existing notebooks.
 
 ## Goals
 
@@ -11,7 +11,7 @@
 3. Run experiments from JSON configs with minimal duplication (pipeline + model registries).
 4. Save reproducible run artifacts; support plots/tables via a reporting module that reads those artifacts.
 5. Keep Google Colab usable (`pip install -e .` / git install + path config).
-6. Preserve notebook cell outputs when updating imports.
+6. Show the new workflow with at least one example notebook (existing notebooks may be cleaned or left as historical artifacts).
 
 ## Non-goals (v1)
 
@@ -62,11 +62,13 @@ pattern_recognition/
   losses.py
   interpretation.py
 configs/                 # checked-in example JSON configs
+notebooks/               # existing research notebooks (optional cleanup)
+  examples/              # new thin example notebook(s) for the config runner
 results/                 # run outputs (gitignore)
 tests/                   # pytest: schema/format, registry, unit, optional smoke
 ```
 
-`pyproject.toml` already declares `packages = [{include = "pattern_recognition"}]`. After the move, remove or replace flat `src/` (prefer delete once notebooks import the package; no long-lived shims unless a short transition is needed).
+`pyproject.toml` already declares `packages = [{include = "pattern_recognition"}]`. After the move, delete flat `src/` (no long-lived shims). Existing notebooks that still use `from utils import ...` will break until cleaned or left unused; the supported path is the package + example notebook.
 
 ### Style / revision rules
 
@@ -78,9 +80,14 @@ tests/                   # pytest: schema/format, registry, unit, optional smoke
 
 ### Notebooks
 
-- Update import cells only: `from pattern_recognition...`.
-- Do not clear or rewrite outputs.
-- Prefer EditNotebook / surgical JSON edits that leave `outputs` arrays untouched.
+**Preferred for v1:** add one thin example notebook (e.g. `notebooks/examples/run_experiment_samara.ipynb`) that:
+
+- installs/imports `pattern_recognition`
+- loads a JSON config (or inline dict)
+- calls `run_experiment`
+- loads the run dir with `reporting` for a simple table/plot
+
+**Optional:** clean imports in existing notebooks to `from pattern_recognition...`. If editing existing notebooks, either leave outputs as-is (surgical import-only edits) or clear them intentionally as part of cleanup — do not half-clear. Migrating every historical notebook is not required for v1.
 
 ## Experiment config
 
@@ -255,8 +262,8 @@ No full notebook execution in CI.
 3. Implement v1 pipelines + wire CNN models into model registry.
 4. Add reporting module (load + table + basic plots).
 5. Add pytest format/unit tests + example configs.
-6. Update notebook import cells only (preserve outputs).
-7. Update `pyproject.toml` / `.gitignore` (`results/`); remove obsolete `src/` when safe.
+6. Add one example notebook demonstrating config → run → reporting (and optionally clean imports on selected existing notebooks).
+7. Update `pyproject.toml` / `.gitignore` (`results/`); remove obsolete `src/`.
 8. Document Colab + local usage in README briefly.
 
 ## Success criteria
@@ -264,5 +271,5 @@ No full notebook execution in CI.
 - `poetry install` / editable install exposes `pattern_recognition`.
 - At least one real-shaped example config runs the epoch-averaging CNN path and writes artifacts including `device_resolved`.
 - Format tests pass for config + metrics contracts.
-- Existing notebooks import the package without losing stored outputs.
+- At least one example notebook demonstrates the new run + reporting flow.
 - New data technique can be added by a new pipeline class + registry entry only.
