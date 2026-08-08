@@ -11,6 +11,13 @@ def test_synthetic_pipeline_registered():
     assert bundle.train is not None and bundle.val is not None
 
 
+def test_real_pipelines_registered():
+    names = list_pipelines()
+    assert "SamaraWithinSubjectAverage" in names
+    assert "SamaraTimeShift" in names
+    assert "BCI3PzEpochAverage" in names
+
+
 def test_unknown_pipeline_lists_options():
     with pytest.raises(KeyError, match="SyntheticBinary"):
         get_pipeline("DoesNotExist")

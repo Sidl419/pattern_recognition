@@ -61,7 +61,9 @@ def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
     _set_seed(cfg.seed)
 
     pipeline_cls = get_pipeline(cfg.data.pipeline)
-    bundle = pipeline_cls(**cfg.data.params).build()
+    params = {**cfg.data.params}
+    params.setdefault("seed", cfg.seed)
+    bundle = pipeline_cls(**params).build()
 
     dataloaders = {
         "train": DataLoader(
