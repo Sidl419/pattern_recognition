@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: pytest (Python 3.11, CPU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        run: pip install "poetry>=2.0,<3"
+
+      - name: Configure Poetry
+        run: poetry config virtualenvs.in-project true
+
+      - name: Install CPU PyTorch
+        run: |
+          poetry env use 3.11
+          poetry run pip install --upgrade pip
+          poetry run pip install torch==2.0.0 --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install project dependencies
+        run: |
+          poetry install --with dev --no-interaction
+          # Poetry may pull a non-CPU torch wheel; pin CPU torch again.
+          poetry run pip install --force-reinstall torch==2.0.0 --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install torch-geometric (best effort)
+        id: pyg
+        continue-on-error: true
+        run: |
+          poetry run pip install "torch-geometric>=2.3.0,<3"
+          poetry run pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv \
+            -f https://data.pyg.org/whl/torch-2.0.0+cpu.html
+
+      - name: Show environment
+        run: |
+          poetry run python -c "import torch; print('torch', torch.__version__, 'cuda', torch.cuda.is_available())"
+          poetry run python -c "import torch_geometric; print('torch_geometric', torch_geometric.__version__)" \
+            || echo "torch_geometric not available (CNN/unit tests should still run)"
+
+      - name: Run tests
+        run: poetry run pytest tests/ -q --tb=short

@@ -4,5 +4,6 @@ __pycache__
 Preprocessed_EEG
 processed_data_multi_data
 .*
+!.github/
 China_information.xlsx
 results/

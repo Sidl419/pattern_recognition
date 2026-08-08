@@ -3,14 +3,24 @@ from tqdm import tqdm
 
 import torch
 from torch.utils.data import Dataset
-from torch_geometric.data import Data, InMemoryDataset
 
 from pattern_recognition.data.p300 import P300Getter
+
+try:
+    from torch_geometric.data import Data, InMemoryDataset
+except ImportError:  # pragma: no cover - optional for CNN / CI paths
+    Data = None
+    InMemoryDataset = object
 
 
 class GraphMatrixDataset(InMemoryDataset):
     def __init__(self, root, train_raw, graph, data_path, eloc, test_chars=None, filter=True,
                     n_channels=64, sfreq=120, sample_size=72, pos_rate=None, label='model', transform=None, pre_transform=None):
+        if Data is None:
+            raise ImportError(
+                "torch_geometric is required for GraphMatrixDataset. "
+                "Install torch-geometric to use GNN datasets."
+            )
 
         self.graph = graph
         self.root = root
