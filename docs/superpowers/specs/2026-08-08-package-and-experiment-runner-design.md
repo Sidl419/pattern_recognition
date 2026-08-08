@@ -235,7 +235,7 @@ Same JSON + `run_experiment` API as local. Typical first cells:
 
 ```python
 # 1) Install from GitHub (or upload the repo and pip install -e .)
-!pip install -q "git+https://github.com/<user>/pattern_recognition.git"
+!pip install -q "git+https://github.com/Sidl419/pattern_recognition.git"
 
 # Or, if the repo is already cloned / Drive-mounted:
 # %cd /content/drive/MyDrive/pattern_recognition
@@ -290,7 +290,7 @@ Notes:
 
 - Point `data.params.path` / `output_dir` at Drive mounts or `/content/...` uploads.
 - Use `"device": "cuda"` on GPU runtimes (fails clearly if the runtime has no GPU); `"auto"` is fine too.
-- The example notebook under `notebooks/examples/` should include a short “Colab” section with these cells (adapted to the real repo URL).
+- The example notebook under `notebooks/examples/` should include a short “Colab” section with these cells.
 
 
 ## Errors
