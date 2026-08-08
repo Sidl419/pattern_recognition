@@ -34,7 +34,7 @@ class BCI3PzEpochAverage:
 
     Wraps :class:`~pattern_recognition.data.p300.P300Getter` with channel
     selection and the shared averaging helpers. Requires local ``.mat`` files
-    (and preferably a custom electrode montage).
+    and an electrode montage file (``eloc64.loc``).
 
     Parameters
     ----------
@@ -44,9 +44,9 @@ class BCI3PzEpochAverage:
         Path to test ``.mat``. When provided, used as the validation/test
         split (matching the matrix notebooks). When omitted, train is split
         with ``val_fraction``.
-    eloc_path : str, optional
-        Path to ``eloc64.loc`` (or similar). If omitted, uses MNE
-        ``standard_1020`` names truncated/padded to ``n_channels``.
+    eloc_path : str
+        Path to ``eloc64.loc`` (or similar). Required; no placeholder montage
+        is synthesized.
     channel_name : str, default ``"Pz"``
         Electrode to keep (case-insensitive; trailing dots stripped).
     n_average : int, default 10
@@ -105,20 +105,15 @@ class BCI3PzEpochAverage:
         self.seed = seed
 
     def _resolve_eloc(self):
-        if self.eloc_path is not None:
-            eloc_path = Path(self.eloc_path).expanduser().resolve()
-            if not eloc_path.is_file():
-                raise FileNotFoundError(f"Electrode montage not found: {eloc_path}")
-            return mne.channels.read_custom_montage(str(eloc_path))
-        # Placeholder montage so P300Getter can run when eloc64.loc is absent.
-        # Prefer providing eloc_path for real BCI III experiments.
-        ch_names = [f"Ch{i:02d}" for i in range(self.n_channels)]
-        pz_slot = min(self.n_channels - 1, 47)
-        ch_names[pz_slot] = self.channel_name
-        ch_pos = {
-            name: (float(i) * 0.01, 0.0, 0.0) for i, name in enumerate(ch_names)
-        }
-        return mne.channels.make_dig_montage(ch_pos=ch_pos, coord_frame="head")
+        if self.eloc_path is None:
+            raise ValueError(
+                "eloc_path is required for BCI3PzEpochAverage "
+                "(path to eloc64.loc or equivalent montage file)"
+            )
+        eloc_path = Path(self.eloc_path).expanduser().resolve()
+        if not eloc_path.is_file():
+            raise FileNotFoundError(f"Electrode montage not found: {eloc_path}")
+        return mne.channels.read_custom_montage(str(eloc_path))
 
     def _channel_index(self, eloc) -> int:
         names = [c.lower().strip(".") for c in eloc.ch_names]
