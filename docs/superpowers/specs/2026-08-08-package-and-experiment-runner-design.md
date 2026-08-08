@@ -84,8 +84,10 @@ tests/                   # pytest: schema/format, registry, unit, optional smoke
 
 - installs/imports `pattern_recognition`
 - loads a JSON config (or inline dict)
-- calls `run_experiment`
+- calls `run_experiment` (ideally twice with different models for a real comparison)
 - loads the run dir with `reporting` for a simple table/plot
+- uses `metrics_table` / `compare_runs` to compare those runs side by side
+- includes a short Colab section matching the Colab examples below
 
 **Optional:** clean imports in existing notebooks to `from pattern_recognition...`. If editing existing notebooks, either leave outputs as-is (surgical import-only edits) or clear them intentionally as part of cleanup — do not half-clear. Migrating every historical notebook is not required for v1.
 
