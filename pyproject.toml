@@ -29,6 +29,11 @@ onnx = "^1.18.0"
 onnxscript = "^0.3.2"
 pkg = "^0.2"
 setuptools = "^80.9.0"
+pydantic = "^2.0.0"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
 
 
 [build-system]
