@@ -1,0 +1,15 @@
+---
+description: Core repo conventions for pattern_recognition (imports, experiments, data)
+alwaysApply: true
+---
+
+# pattern_recognition — agent defaults
+
+Read `AGENTS.md` for the full guide. Enforce at minimum:
+
+- Absolute imports only: `from pattern_recognition...` (no flat `utils` / `models_cnn`, no relative-dot package imports).
+- New preprocessing → new registered data pipeline class; keep JSON configs thin.
+- Epoch-averaging experiments: JSON → `run_experiment` → artifacts under `results/`; reporting reads artifacts only.
+- Do not clear historical notebook outputs unless asked.
+- Do not commit raw EEG dumps (`Samara_data/`, `raw_data/`, large `.mat`/CSV) or change model math casually.
+- Prefer linking/editing `docs/superpowers/specs/` over duplicating long design prose in chat.
