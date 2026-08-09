@@ -8,17 +8,24 @@ _COL_CODES = frozenset(range(1, 7))
 _ROW_CODES = frozenset(range(7, 13))
 
 
+def uses_rowcol_stimulus(stimulus_ids: np.ndarray) -> bool:
+    ids = {int(stim_id) for stim_id in stimulus_ids}
+    if 0 in ids or any(stim_id > 12 for stim_id in ids):
+        return False
+    return ids <= (_ROW_CODES | _COL_CODES)
+
+
 def _mask_repeats(repeat_index: np.ndarray, r: int) -> np.ndarray:
     return repeat_index < r
 
 
-def decode_rowcol(
+def aggregate_rowcol_scores(
     scores: np.ndarray,
     stimulus_ids: np.ndarray,
     repeat_index: np.ndarray,
     r: int,
     grid: GridSpec,
-) -> str:
+) -> tuple[np.ndarray, np.ndarray]:
     mask = _mask_repeats(repeat_index, r)
     row_scores = np.zeros(grid.n_rows, dtype=float)
     col_scores = np.zeros(grid.n_cols, dtype=float)
@@ -30,18 +37,16 @@ def decode_rowcol(
         elif stim_id in _COL_CODES:
             col_scores[CODE_TO_COL[stim_id]] += score
 
-    best_row = int(np.argmax(row_scores))
-    best_col = int(np.argmax(col_scores))
-    return grid.char_at(best_row, best_col)
+    return row_scores, col_scores
 
 
-def decode_single_flash(
+def aggregate_single_flash_scores(
     scores: np.ndarray,
     stimulus_ids: np.ndarray,
     repeat_index: np.ndarray,
     r: int,
     grid: GridSpec,
-) -> str:
+) -> np.ndarray:
     mask = _mask_repeats(repeat_index, r)
     n_cells = grid.n_rows * grid.n_cols
     cell_scores = np.zeros(n_cells, dtype=float)
@@ -60,4 +65,32 @@ def decode_single_flash(
             where=cell_counts > 0,
         )
 
+    return cell_means
+
+
+def decode_rowcol(
+    scores: np.ndarray,
+    stimulus_ids: np.ndarray,
+    repeat_index: np.ndarray,
+    r: int,
+    grid: GridSpec,
+) -> str:
+    row_scores, col_scores = aggregate_rowcol_scores(
+        scores, stimulus_ids, repeat_index, r, grid
+    )
+    best_row = int(np.argmax(row_scores))
+    best_col = int(np.argmax(col_scores))
+    return grid.char_at(best_row, best_col)
+
+
+def decode_single_flash(
+    scores: np.ndarray,
+    stimulus_ids: np.ndarray,
+    repeat_index: np.ndarray,
+    r: int,
+    grid: GridSpec,
+) -> str:
+    cell_means = aggregate_single_flash_scores(
+        scores, stimulus_ids, repeat_index, r, grid
+    )
     return grid.chars[int(np.argmax(cell_means))]
