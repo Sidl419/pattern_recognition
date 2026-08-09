@@ -10,8 +10,13 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 import numpy as np
+import torch
 
+import pattern_recognition.models  # noqa: F401 — register models
 import pattern_recognition.speller.protocols  # noqa: F401 — register protocols
+from pattern_recognition.experiment.schema import ExperimentConfig
+from pattern_recognition.models import get_model
+from pattern_recognition.training.device import resolve_device
 from pattern_recognition.reporting.plots import save_speller_plots
 from pattern_recognition.speller.grids import COL_CODE, ROW_CODE
 from pattern_recognition.speller.metrics import evaluate_selections
@@ -52,15 +57,71 @@ class OracleFlashScorer:
         return np.where(selection.stimulus_ids == target_cell, 1.0, 0.0)
 
 
+class RunFlashScorer:
+    """Score flashes using a binary CNN checkpoint from ``run_dir``."""
+
+    def __init__(self, model: torch.nn.Module, device: torch.device) -> None:
+        self._model = model
+        self._device = device
+
+    def predict_scores(self, selection: Selection) -> np.ndarray:
+        flashes = np.asarray(selection.flashes, dtype=np.float32)
+        if flashes.ndim == 1:
+            flashes = flashes[np.newaxis, ...]
+        x = torch.from_numpy(flashes).to(self._device)
+        self._model.eval()
+        with torch.no_grad():
+            outputs = self._model(x)
+        if outputs.ndim == 2 and outputs.shape[-1] >= 2:
+            scores = outputs[:, 1]
+        else:
+            scores = outputs.reshape(outputs.shape[0], -1)[:, 0]
+        return scores.detach().cpu().numpy()
+
+
 def load_flash_scorer_from_run(
     run_dir: Path,
     *,
     model_mode: str,
 ) -> FlashScorer:
     """Load a flash scorer checkpoint from a binary experiment run."""
-    raise NotImplementedError(
-        "Checkpoint loading from run_dir is implemented in Task 9"
+    if model_mode == "selection_classifier":
+        raise NotImplementedError(
+            "selection_classifier scoring from run_dir is not implemented in v1; "
+            "inject a scores_provider or train a selection-classifier checkpoint"
+        )
+    if model_mode != "flash_scorer":
+        raise ValueError(f"Unsupported model_mode {model_mode!r}")
+
+    run_dir = Path(run_dir)
+    config_path = run_dir / "config.json"
+    if not config_path.is_file():
+        raise FileNotFoundError(
+            f"Binary run config not found: {config_path}"
+        )
+
+    checkpoint_path = run_dir / "model.pt"
+    if not checkpoint_path.is_file():
+        raise FileNotFoundError(
+            f"No model checkpoint at {checkpoint_path}; "
+            "train with train.save_model=true or inject scores_provider"
+        )
+
+    exp_cfg = ExperimentConfig.model_validate(
+        json.loads(config_path.read_text())
     )
+    device_requested = exp_cfg.device
+    meta_path = run_dir / "run_meta.json"
+    if meta_path.is_file():
+        meta = json.loads(meta_path.read_text())
+        device_requested = meta.get("device_requested", device_requested)
+
+    _, device = resolve_device(device_requested)
+    model = get_model(exp_cfg.model.name)(**exp_cfg.model.params)
+    state = torch.load(checkpoint_path, map_location=device)
+    model.load_state_dict(state)
+    model.to(device)
+    return RunFlashScorer(model, device)
 
 
 def _load_config(
