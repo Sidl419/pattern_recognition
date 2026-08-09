@@ -8,13 +8,6 @@ _COL_CODES = frozenset(range(1, 7))
 _ROW_CODES = frozenset(range(7, 13))
 
 
-def uses_rowcol_stimulus(stimulus_ids: np.ndarray) -> bool:
-    ids = {int(stim_id) for stim_id in stimulus_ids}
-    if 0 in ids or any(stim_id > 12 for stim_id in ids):
-        return False
-    return ids <= (_ROW_CODES | _COL_CODES)
-
-
 def _mask_repeats(repeat_index: np.ndarray, r: int) -> np.ndarray:
     return repeat_index < r
 

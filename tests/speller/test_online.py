@@ -27,7 +27,16 @@ def test_early_stop_triggers_on_margin():
     def dec(sc, s, r):
         return decode_single_flash(sc, s.stimulus_ids, s.repeat_index, r, SAMARA_GRID)
 
-    steps = online_decode(sel, scores, dec, r_max=3, early_stop=True, margin_tau=1.0)
+    steps = online_decode(
+        sel,
+        scores,
+        dec,
+        r_max=3,
+        early_stop=True,
+        margin_tau=1.0,
+        mode="single_flash",
+        grid=SAMARA_GRID,
+    )
     assert steps[0]["stopped"] is True
     assert steps[0]["pred"] == "J"
     assert len(steps) == 1
@@ -51,6 +60,15 @@ def test_no_early_stop_runs_all_repeats():
     def dec(sc, s, r):
         return decode_single_flash(sc, s.stimulus_ids, s.repeat_index, r, SAMARA_GRID)
 
-    steps = online_decode(sel, scores, dec, r_max=2, early_stop=False, margin_tau=1.0)
+    steps = online_decode(
+        sel,
+        scores,
+        dec,
+        r_max=2,
+        early_stop=False,
+        margin_tau=1.0,
+        mode="single_flash",
+        grid=SAMARA_GRID,
+    )
     assert len(steps) == 2
     assert all(not step["stopped"] for step in steps)
