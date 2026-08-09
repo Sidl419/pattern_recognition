@@ -12,6 +12,7 @@ from typing import Protocol, runtime_checkable
 import numpy as np
 
 import pattern_recognition.speller.protocols  # noqa: F401 — register protocols
+from pattern_recognition.reporting.plots import save_speller_plots
 from pattern_recognition.speller.grids import COL_CODE, ROW_CODE
 from pattern_recognition.speller.metrics import evaluate_selections
 from pattern_recognition.speller.online import DecodeMode
@@ -312,5 +313,8 @@ def run_speller_benchmark(
         ["subject", "selection_id", "r", "true", "pred"],
         prediction_rows,
     )
+
+    if cfg.plots:
+        save_speller_plots(speller_dir)
 
     return speller_dir

@@ -82,6 +82,7 @@ class SpellerBenchmarkConfig(BaseModel):
     simulation: Optional[SimulationConfig] = None
     allow_split_mismatch: bool = False
     allow_train_pool_eval: bool = False
+    plots: bool = True
 
     @model_validator(mode="after")
     def validate_coupling(self) -> Self:

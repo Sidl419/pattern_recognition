@@ -33,3 +33,13 @@ def load_run(path: str | Path) -> RunArtifacts:
         metrics=metrics,
         history=history,
     )
+
+
+def load_speller_tag(run_dir: str | Path, tag: str) -> dict:
+    """Load ``speller_metrics.json`` for a speller benchmark tag under ``run_dir``."""
+    metrics_path = Path(run_dir) / "speller" / tag / "speller_metrics.json"
+    if not metrics_path.is_file():
+        raise FileNotFoundError(
+            f"speller metrics not found for tag {tag!r}: {metrics_path}"
+        )
+    return json.loads(metrics_path.read_text())
