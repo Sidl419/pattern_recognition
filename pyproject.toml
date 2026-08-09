@@ -41,6 +41,7 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
 filterwarnings = [
     "ignore:pkg_resources is deprecated as an API:UserWarning",
     "ignore:Deprecated call to `pkg_resources.declare_namespace:DeprecationWarning",
