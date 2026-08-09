@@ -33,6 +33,19 @@ The installable package is `pattern_recognition`. Experiments for the epoch-aver
 
 Example notebook (run → load → compare): [`notebooks/examples/run_experiment_samara.ipynb`](notebooks/examples/run_experiment_samara.ipynb).
 
+## Speller benchmark
+
+Character-level accuracy and ITR (vs flash repetition count) from a trained binary P300 model. Design: [`docs/superpowers/specs/2026-08-09-bci-speller-benchmark-design.md`](docs/superpowers/specs/2026-08-09-bci-speller-benchmark-design.md).
+
+```bash
+# after a binary run exists under results/<name>_<timestamp>/
+python -m pattern_recognition.speller run \
+  --config configs/speller_bci3_within.json \
+  --run-dir results/<binary_run>/
+```
+
+Example configs: [`configs/speller_bci3_within.json`](configs/speller_bci3_within.json) (BCI III row×column), [`configs/speller_samara_sim_within.json`](configs/speller_samara_sim_within.json) (Samara simulated protocol). Artifacts land in `results/<binary_run>/speller/<tag>/`.
+
 ## Models
 
 | Model | Role |

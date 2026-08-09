@@ -8,6 +8,7 @@ Two research tracks:
 
 1. **GNN** — multi-channel EEG as graphs (`notebooks/`, models under `pattern_recognition.models.gnn`).
 2. **Epoch averaging / CNN** — SNR via trial averaging; JSON configs + `run_experiment` (v1 runner focus).
+3. **Speller benchmark** — character-level evaluation from binary P300 models; code under `pattern_recognition/speller`, artifacts under `run_dir/speller/<tag>/`.
 
 Installable package: `pattern_recognition` (Poetry). Design: `docs/superpowers/specs/2026-08-08-package-and-experiment-runner-design.md`.
 
