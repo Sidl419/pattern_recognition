@@ -37,6 +37,12 @@ Example notebook (run → load → compare): [`notebooks/examples/run_experiment
 
 Character-level accuracy and ITR (vs flash repetition count) from a trained binary P300 model. Design: [`docs/superpowers/specs/2026-08-09-bci-speller-benchmark-design.md`](docs/superpowers/specs/2026-08-09-bci-speller-benchmark-design.md).
 
+By default (`use_synthetic: false`) selections come from **real EEG** via binary `data.params` and/or speller `protocol_params`:
+- BCI III — `test_mat` + `eloc_path` + `StimulusCode` (ground truth)
+- Samara — `path` to `.mat` dir + holdout + 4×4 simulation (`label_source: simulated`)
+
+Set `use_synthetic: true` only for CI smoke (random flashes).
+
 ```bash
 # after a binary run exists under results/<name>_<timestamp>/
 python -m pattern_recognition.speller run \
