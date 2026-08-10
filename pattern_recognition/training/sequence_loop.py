@@ -163,9 +163,10 @@ def train_sequence_classifier(
     """Train SC with protocol CE heads.
 
     Primary ``Accuracy`` is row×col joint correctness (``head_mode='rowcol'``) or
-    cell/character correctness (``head_mode='cell'``). Balanced accuracy / F1 / ITR
-    reuse the same scalar for runner artifact compatibility (documented as selection
-    accuracy, not flash-level binary metrics).
+    cell/character correctness (``head_mode='cell'``). ``Balanced Accuracy`` and
+    ``F1-score`` are filled with NaN (selection accuracy is not a flash-level
+    binary metric). ``ITR`` is computed from selection accuracy with the
+    protocol class count.
     """
     since = time.time()
     optimizer = optim.Adam(
@@ -234,13 +235,16 @@ def train_sequence_classifier(
         scheduler.step()
 
     time_elapsed = time.time() - since
-    acc_arr = np.array(val_acc_history)
-    # Map selection accuracy into binary-compatible metric keys for the runner.
-    itr_arr = np.array([compute_itr(float(a), n_classes=n_classes) for a in acc_arr])
+    acc_arr = np.array(val_acc_history, dtype=float)
+    # Selection accuracy maps into Accuracy only; bal-acc / F1 are not defined.
+    nan_arr = np.full_like(acc_arr, np.nan, dtype=float)
+    itr_arr = np.array(
+        [compute_itr(float(a), n_classes=n_classes) for a in acc_arr], dtype=float
+    )
     metrics = {
         "Accuracy": acc_arr,
-        "Balanced Accuracy": acc_arr.copy(),
-        "F1-score": acc_arr.copy(),
+        "Balanced Accuracy": nan_arr,
+        "F1-score": nan_arr.copy(),
         "ITR": itr_arr,
     }
     return np.array(val_loss_history), metrics, time_elapsed
