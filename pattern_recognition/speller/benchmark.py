@@ -24,6 +24,7 @@ from pattern_recognition.speller.metrics import (
     selection_duration_s,
 )
 from pattern_recognition.speller.online import DecodeMode
+from pattern_recognition.speller.packing import pack_selection
 from pattern_recognition.speller.protocols import get_protocol
 from pattern_recognition.speller.protocols.base import SpellerProtocol
 from pattern_recognition.speller.schema import SpellerBenchmarkConfig
@@ -83,6 +84,38 @@ class RunFlashScorer:
         return scores.detach().cpu().numpy()
 
 
+class ContextualFlashScorer:
+    """Score flashes with a ContextualTransformer via packed selection packets."""
+
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        device: torch.device,
+        protocol: str,
+    ) -> None:
+        self._model = model
+        self._device = device
+        self._protocol = protocol
+
+    def predict_scores(self, selection: Selection) -> np.ndarray:
+        packed = pack_selection(selection, protocol=self._protocol)
+        epochs = packed["epochs"].unsqueeze(0).to(self._device)
+        stimulus_codes = packed["stimulus_codes"].unsqueeze(0).to(self._device)
+        repetitions = packed["repetitions"].unsqueeze(0).to(self._device)
+        valid_mask = packed["valid_mask"].unsqueeze(0).to(self._device)
+
+        self._model.eval()
+        with torch.no_grad():
+            flash_logits, out_mask = self._model(
+                epochs=epochs,
+                stimulus_codes=stimulus_codes,
+                repetitions=repetitions,
+                valid_mask=valid_mask,
+            )
+        scores = flash_logits[0][out_mask[0]]
+        return scores.detach().cpu().numpy()
+
+
 def load_flash_scorer_from_run(
     run_dir: Path,
     *,
@@ -121,6 +154,14 @@ def load_flash_scorer_from_run(
     state = torch.load(checkpoint_path, map_location=device, weights_only=True)
     model.load_state_dict(state)
     model.to(device)
+
+    if exp_cfg.model.name == "ContextualTransformer":
+        protocol = exp_cfg.data.params.get("protocol")
+        if not protocol:
+            raise ValueError(
+                "ContextualTransformer run config must set data.params.protocol"
+            )
+        return ContextualFlashScorer(model, device, protocol=protocol)
     return RunFlashScorer(model, device)
 
 
