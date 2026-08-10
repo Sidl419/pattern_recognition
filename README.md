@@ -9,16 +9,51 @@ The installable package is `pattern_recognition`. Experiments for the epoch-aver
 
 ## Datasets
 
-| Dataset | Task | Typical use in this repo | Location / source |
-|---|---|---|---|
-| BCI Competition III, dataset II | P300 speller | GNN 64-ch; epoch-average Pz (Subjects A/B) | [bbci.de](https://www.bbci.de/competition/iii/#top); `raw_data/` |
-| Samara multi-EEG (S0201…S2001) | P300 classic / Aperture B | Epoch averaging, time-shift | `Samara_data/` (and `processed_data/` CSVs) |
-| SEED | 3-class emotion | GNN notebooks | documented path in SEED notebooks |
+| Dataset | Subjects | Task | Typical use in this repo | Location / source |
+|---|---|---|---|---|
+| BCI Competition III, dataset II | A, B | P300 row×column speller | GNN 64-ch; Pz epoch-average; speller benchmark | [bbci.de](https://www.bbci.de/competition/iii/#top); `matrix_dataset/` (also mirrored under `raw_data/`) |
+| Samara multi-EEG | 10 (`S0201`…`S2001`) | P300 classic / Aperture B | Epoch averaging, time-shift, simulated speller | `Samara_data/` (`.mat`); optional `processed_data/*_PZ.csv` |
+| SEED | 15 (standard release) | 3-class emotion | GNN notebooks only (not in v1 runner / speller) | path set in SEED notebooks |
 
-**Channel / time conventions (typical after pipeline):**
+### BCI Competition III — Dataset II
 
-- Samara Pz: 250 samples @ 250 Hz (single-channel or MC stacks).
-- BCI III: 64 channels, 72 samples @ 120 Hz after the GNN / matrix pipelines; Pz epoch-average path uses the Pz channel only.
+Classic Wadsworth P300 speller (6×6 grid, row/column intensification).
+
+| Split | Characters | Continuous samples / char | EEG channels | Notes |
+|---|---|---|---|---|
+| Subject A/B **Train** | 85 each | 7794 @ native rate | 64 | Has `StimulusType` + `TargetChar` |
+| Subject A/B **Test** | 100 each | 7794 | 64 | Labels withheld in the public mats; this repo uses the published target strings for eval |
+
+After pipeline preprocessing (band-pass / resample in `P300Getter`):
+
+- **64-ch GNN / matrix path:** epochs of **72 samples @ 120 Hz** per flash.
+- **Pz epoch-average / speller path:** same flash windows, **Pz only** (plus per-sample z-score; speller also applies the shared MNE `Scaler` path).
+- **Stimulus schedule:** 12 codes (6 rows + 6 columns) × **15 repeats** → **180 flashes / character** (train A: 85×180 = 15 300 flashes; test A: 100×180 = 18 000).
+- Speller decode is ground-truth (`StimulusCode`); do not pool A and B in `within_subject` mode.
+
+### Samara multi-EEG
+
+Local collection used for within-/cross-subject P300 work and the simulated single-flash speller.
+
+| Property | P300 classic | Aperture B |
+|---|---|---|
+| Subjects in this checkout | 10 (`S0201`, `S0601`, `S0701`, `S1201`, `S1401`, `S1601`, `S1701`, `S1801`, `S1901`, `S2001`) | same 10 |
+| Channels in `.mat` | P4, **PZ**, P3 | same |
+| Sampling rate | 250 Hz | 250 Hz |
+| Raw epoch length | 500 samples (2.0 s) | 500 samples |
+| Approx. epochs / subject | ~6 760 | ~6 760 |
+| Class balance (P300 classic, all subjects) | ~4 215 target / ~63 402 non-target (~1:15) | similar oddball imbalance |
+| Filtering recorded in mats | FIR band-pass ~1–15 Hz | same metadata fields |
+
+**How the package uses it:**
+
+- Default runner pipelines take **PZ** (`channel_idx=1`) and truncate to **250 samples (0–1 s @ 250 Hz)** for CNN inputs; time-shift pipelines keep the long 500-sample epochs and cut shifted 250-sample windows.
+- Labels are binary only (`0` / `1`). There are **no stimulus IDs** in the mats, so character-level Samara evaluation is a **4×4 single-flash simulation** (`label_source: simulated`; default phrase `JUST_DO_IT`, SOA 110 ms).
+- `processed_data/S*_P300_PZ.csv` / `S*_AB_PZ.csv` are optional flattened PZ dumps (~6 770×251: label + 250 samples) for notebook baselines — not required by `run_experiment`.
+
+### SEED
+
+SJTU Emotion EEG Dataset (standard public release): **15 subjects**, **62 channels**, **3 emotion classes** (positive / neutral / negative). Used only in historical GNN notebooks (`notebooks/`); not wired into the JSON experiment runner or speller benchmark in v1.
 
 ## Experiment setups
 

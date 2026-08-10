@@ -1,4 +1,5 @@
 import math
+from typing import Optional
 
 import torch
 from torch import nn
@@ -283,7 +284,12 @@ class EEGNet(nn.Module):
         # Classification layer
         self.classifier = nn.Linear(F2 * (input_feat_dim // 32), num_classes)
 
-    def forward(self, x):
+    def extract_features(self, x):
+        """Return the single-flash feature vector before the classifier.
+
+        This keeps ``forward`` backwards compatible while allowing sequence
+        models to reuse EEGNet as a flash-epoch encoder.
+        """
         # x shape: (batch, channels, samples)
         x = x.unsqueeze(1)  # (batch, 1, channels, samples)
 
@@ -302,9 +308,198 @@ class EEGNet(nn.Module):
         x = self.avgpool2(x)
         x = self.dropout2(x)
 
-        x = torch.flatten(x, start_dim=1)
-        x = self.classifier(x)
-        return x
+        return torch.flatten(x, start_dim=1)
+
+    def forward(self, x):
+        return self.classifier(self.extract_features(x))
+
+
+class P300SequenceEncoder(nn.Module):
+    """Embed every P300 flash with EEGNet and contextualise a character sequence.
+
+    Parameters
+    ----------
+    eegnet:
+        Existing single-trial :class:`EEGNet`. Its convolutional feature
+        extractor is reused; its binary classifier is not used here.
+    d_model:
+        Transformer embedding width.
+
+    Notes
+    -----
+    ``epochs`` has shape ``[batch, flashes, channels, samples]``; on BCI III
+    this is normally ``[B, 180, 64, 72]``. ``stimulus_codes`` contains the
+    actual row/column IDs 1..12 (0 is reserved for padding). ``repetitions``
+    contains 0..14. The model never invents a speller schedule.
+    """
+
+    def __init__(
+        self,
+        eegnet: EEGNet,
+        d_model: int = 64,
+        nhead: int = 4,
+        num_layers: int = 2,
+        dim_feedforward: int = 128,
+        dropout: float = 0.15,
+        max_flashes: int = 180,
+        max_repetitions: int = 15,
+    ):
+        super().__init__()
+        if d_model % nhead != 0:
+            raise ValueError("d_model must be divisible by nhead")
+
+        self.eegnet = eegnet
+        self.max_flashes = max_flashes
+        self.max_repetitions = max_repetitions
+        feature_dim = eegnet.classifier.in_features
+        self.feature_projection = nn.Sequential(
+            nn.Linear(feature_dim, d_model),
+            nn.LayerNorm(d_model),
+            nn.Dropout(dropout),
+        )
+        self.code_embedding = nn.Embedding(13, d_model, padding_idx=0)
+        self.repetition_embedding = nn.Embedding(max_repetitions, d_model)
+        self.position_embedding = nn.Embedding(max_flashes, d_model)
+
+        layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            activation="gelu",
+            batch_first=True,
+            norm_first=True,
+        )
+        self.transformer = nn.TransformerEncoder(
+            layer, num_layers=num_layers, norm=nn.LayerNorm(d_model)
+        )
+
+    def forward(
+        self,
+        epochs: torch.Tensor,
+        stimulus_codes: torch.Tensor,
+        repetitions: torch.Tensor,
+        valid_mask: Optional[torch.Tensor] = None,
+        causal: bool = False,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if epochs.ndim != 4:
+            raise ValueError("epochs must have shape [batch, flashes, channels, samples]")
+        batch, flashes, channels, samples = epochs.shape
+        if flashes > self.max_flashes:
+            raise ValueError(f"got {flashes} flashes; max_flashes is {self.max_flashes}")
+        if stimulus_codes.shape != (batch, flashes) or repetitions.shape != (batch, flashes):
+            raise ValueError("stimulus_codes and repetitions must have shape [batch, flashes]")
+        if stimulus_codes.min() < 0 or stimulus_codes.max() > 12:
+            raise ValueError("stimulus_codes must be in 0..12; zero is padding only")
+        if repetitions.min() < 0 or repetitions.max() >= self.max_repetitions:
+            raise ValueError("repetitions outside configured range")
+
+        if valid_mask is None:
+            valid_mask = torch.ones(batch, flashes, dtype=torch.bool, device=epochs.device)
+
+        flat_epochs = epochs.reshape(batch * flashes, channels, samples)
+        flash_features = self.eegnet.extract_features(flat_epochs)
+        x = self.feature_projection(flash_features).reshape(batch, flashes, -1)
+
+        position = torch.arange(flashes, device=epochs.device).unsqueeze(0)
+        x = x + self.code_embedding(stimulus_codes.long())
+        x = x + self.repetition_embedding(repetitions.long())
+        x = x + self.position_embedding(position)
+
+        attention_mask = None
+        if causal:
+            attention_mask = torch.triu(
+                torch.ones(flashes, flashes, dtype=torch.bool, device=epochs.device),
+                diagonal=1,
+            )
+
+        x = self.transformer(
+            x,
+            mask=attention_mask,
+            src_key_padding_mask=~valid_mask.bool(),
+        )
+        return x, valid_mask.bool()
+
+
+class ContextualTransformer(nn.Module):
+    """Flash-wise contextual P300 detector: P(target_i | sequence)."""
+
+    def __init__(self, sequence_encoder: P300SequenceEncoder):
+        super().__init__()
+        self.sequence_encoder = sequence_encoder
+        d_model = sequence_encoder.code_embedding.embedding_dim
+        self.flash_classifier = nn.Sequential(
+            nn.Linear(d_model, d_model),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(d_model, 1),
+        )
+
+    def forward(self, *args, **kwargs) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return ``flash_logits [B,S]`` and ``valid_mask [B,S]``."""
+        embeddings, valid_mask = self.sequence_encoder(*args, **kwargs)
+        return self.flash_classifier(embeddings).squeeze(-1), valid_mask
+
+    @staticmethod
+    def loss(
+        flash_logits: torch.Tensor,
+        flash_targets: torch.Tensor,
+        valid_mask: torch.Tensor,
+        pos_weight: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Masked weighted binary loss; estimate ``pos_weight`` on train only."""
+        return F.binary_cross_entropy_with_logits(
+            flash_logits[valid_mask],
+            flash_targets.float()[valid_mask],
+            pos_weight=pos_weight,
+        )
+
+
+class SequenceClassifier(nn.Module):
+    """Direct character decoder: P(row, column | complete flash sequence)."""
+
+    def __init__(
+        self, sequence_encoder: P300SequenceEncoder, include_character_head: bool = True
+    ):
+        super().__init__()
+        self.sequence_encoder = sequence_encoder
+        d_model = sequence_encoder.code_embedding.embedding_dim
+        self.pool_attention = nn.Linear(d_model, 1)
+        self.row_classifier = nn.Linear(d_model, 6)
+        self.column_classifier = nn.Linear(d_model, 6)
+        self.character_classifier = (
+            nn.Linear(d_model, 36) if include_character_head else None
+        )
+
+    def forward(self, *args, **kwargs) -> dict[str, torch.Tensor]:
+        embeddings, valid_mask = self.sequence_encoder(*args, **kwargs)
+        weights = self.pool_attention(embeddings).squeeze(-1)
+        weights = weights.masked_fill(~valid_mask, float("-inf")).softmax(dim=1)
+        pooled = torch.einsum("bs,bsd->bd", weights, embeddings)
+
+        output = {
+            "row_logits": self.row_classifier(pooled),
+            "column_logits": self.column_classifier(pooled),
+        }
+        if self.character_classifier is not None:
+            output["character_logits"] = self.character_classifier(pooled)
+        return output
+
+    @staticmethod
+    def loss(
+        output: dict[str, torch.Tensor],
+        row_targets: torch.Tensor,
+        column_targets: torch.Tensor,
+        character_targets: Optional[torch.Tensor] = None,
+        character_weight: float = 0.25,
+    ) -> torch.Tensor:
+        loss = F.cross_entropy(output["row_logits"], row_targets.long())
+        loss = loss + F.cross_entropy(output["column_logits"], column_targets.long())
+        if character_targets is not None and "character_logits" in output:
+            loss = loss + character_weight * F.cross_entropy(
+                output["character_logits"], character_targets.long()
+            )
+        return loss
 
 
 class DeepConvNet(nn.Module):
