@@ -2,6 +2,12 @@
   "name": "samara_sequence_classifier",
   "seed": 0,
   "device": "auto",
+  "split": {
+    "seed": 0,
+    "epoch_holdout": 0.3,
+    "stratify": true,
+    "val_fraction": 0.2
+  },
   "data": {
     "pipeline": "SamaraSelectionPackets",
     "params": {
@@ -10,11 +16,7 @@
       "r_max": 10,
       "channel_idx": 1,
       "epoch_len": 250,
-      "file_pattern": "S*-P300_classic.mat",
-      "seed": 0,
-      "epoch_holdout": 0.3,
-      "val_fraction": 0.2,
-      "stratify": true
+      "file_pattern": "S*-P300_classic.mat"
     }
   },
   "model": {

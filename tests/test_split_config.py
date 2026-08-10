@@ -125,6 +125,28 @@ def test_shared_split_train_eval_indices_disjoint():
     assert used.issubset(set(speller_eval.tolist()))
 
 
+@pytest.mark.parametrize(
+    ("train_name", "speller_name"),
+    [
+        ("samara_contextual_transformer.json", "speller_samara_contextual.json"),
+        ("samara_sequence_classifier.json", "speller_samara_sequence_classifier.json"),
+    ],
+)
+def test_samara_train_example_configs_have_top_level_split(
+    train_name: str, speller_name: str
+):
+    """Train configs must expose split at top level (for speller validation)."""
+    root = Path(__file__).resolve().parents[1] / "configs"
+    train_payload = json.loads((root / train_name).read_text())
+    speller_payload = json.loads((root / speller_name).read_text())
+
+    cfg = ExperimentConfig.model_validate(train_payload)
+    assert cfg.split is not None
+    assert cfg.split.model_dump() == speller_payload["split"]
+    for key in ("seed", "epoch_holdout", "val_fraction", "stratify"):
+        assert key not in cfg.data.params
+
+
 def test_samara_speller_rejects_binary_run_without_split(tmp_path: Path):
     run_dir = tmp_path / "binary_run"
     run_dir.mkdir()
