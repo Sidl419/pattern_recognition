@@ -144,3 +144,16 @@ class EEGDataset(Dataset):
 
     def __len__(self):
         return self.tensors[0].size(0)
+
+
+class SelectionPacketDataset(Dataset):
+    """Dataset of packed selection packets (dict of CPU tensors)."""
+
+    def __init__(self, packets: list[dict]) -> None:
+        self.packets = list(packets)
+
+    def __getitem__(self, index: int) -> dict:
+        return self.packets[index]
+
+    def __len__(self) -> int:
+        return len(self.packets)
