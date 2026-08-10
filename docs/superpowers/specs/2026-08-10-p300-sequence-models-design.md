@@ -1,7 +1,7 @@
 # P300 sequence models — train + speller integration
 
 **Date:** 2026-08-10  
-**Status:** Draft for user review  
+**Status:** Approved / implemented  
 **Scope:** Wire `P300SequenceEncoder`, `ContextualTransformer`, and `SequenceClassifier` (already in `pattern_recognition/models/cnn.py`) into the experiment runner and the reserved speller `selection_classifier` slot; support BCI Competition III and Samara; document architectures so the three-way comparison below is runnable.
 
 **Related:**
@@ -86,7 +86,7 @@ Shared unit of evaluation remains `Selection`. Sequence models additionally need
 - Table size = `num_stimulus_codes` (embedding length; pad already included as index 0):
   - BCI3: codes `0..12` → `num_stimulus_codes=13` (real `1..12`)
   - Samara: codes `0..16` → `num_stimulus_codes=17` (real cells `1..16`)
-- When packing Samara `Selection` objects whose `stimulus_ids` are 0-based cell indices `0..15`, shift to `1..16` for the model; keep 0-based ids in `Selection` for protocol decode unless a single packed representation is shared carefully documented in code.
+- `Selection.stimulus_ids` stay protocol-native (BCI3 `1..12`; Samara cells `0..15`). Packing maps to model codes (Samara `+1` → `1..16`); decode always uses the original `Selection.stimulus_ids`.
 
 ### ContextualTransformer
 

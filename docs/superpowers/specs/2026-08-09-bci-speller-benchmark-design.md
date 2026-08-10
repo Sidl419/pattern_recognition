@@ -332,7 +332,7 @@ Reporting helpers (`load_run`, tables, plots) gain optional discovery of `spelle
 2. Run `run_speller_benchmark` against that `run_dir` (metrics + plots under `speller/<tag>/`).
 3. Compare models via nested speller metrics/plots (same binary hyperparams, different architectures; or same architecture, different subject modes).
 
-`selection_classifier` training may later get its own pipeline that builds selection packets; v1 only requires the evaluation interface and a stub/simple baseline if needed for tests. Full transformer training is not required to close this design.
+`selection_classifier` is implemented for `SequenceClassifier` (selection-packet train + direct symbol decode); see `docs/superpowers/specs/2026-08-10-p300-sequence-models-design.md`.
 
 ## Testing
 
