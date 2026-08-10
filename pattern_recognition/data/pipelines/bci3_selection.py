@@ -36,7 +36,13 @@ class BCI3SelectionPackets:
         max_chars: int | None = None,
         val_fraction: float = 0.2,
         seed: int = 0,
+        protocol: str | None = None,
     ) -> None:
+        if protocol is not None and protocol != PROTOCOL:
+            raise ValueError(
+                f"BCI3SelectionPackets protocol must be {PROTOCOL!r}, got {protocol!r}"
+            )
+        self.protocol = PROTOCOL
         self.train_mat = train_mat
         self.test_mat = test_mat
         self.eloc_path = eloc_path
@@ -130,7 +136,7 @@ class BCI3SelectionPackets:
             test=None,
             metadata={
                 "pipeline": "BCI3SelectionPackets",
-                "protocol": PROTOCOL,
+                "protocol": self.protocol,
                 "label_source": "ground_truth",
                 "train_mat": str(train_path),
                 "test_mat": str(test_path) if test_path else None,

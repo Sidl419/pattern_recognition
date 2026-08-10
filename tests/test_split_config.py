@@ -147,6 +147,27 @@ def test_samara_train_example_configs_have_top_level_split(
         assert key not in cfg.data.params
 
 
+@pytest.mark.parametrize(
+    ("train_name", "expected_protocol"),
+    [
+        ("bci3_contextual_transformer.json", "bci3_rowcol"),
+        ("bci3_sequence_classifier.json", "bci3_rowcol"),
+        ("samara_contextual_transformer.json", "samara_single_flash_sim"),
+        ("samara_sequence_classifier.json", "samara_single_flash_sim"),
+    ],
+)
+def test_ct_sc_train_example_configs_include_data_protocol(
+    train_name: str, expected_protocol: str
+):
+    """CT/SC train configs must dump data.params.protocol for speller loaders."""
+    root = Path(__file__).resolve().parents[1] / "configs"
+    payload = json.loads((root / train_name).read_text())
+    cfg = ExperimentConfig.model_validate(payload)
+    assert cfg.data.params.get("protocol") == expected_protocol
+    dumped = json.loads(cfg.model_dump_json())
+    assert dumped["data"]["params"]["protocol"] == expected_protocol
+
+
 def test_samara_speller_rejects_binary_run_without_split(tmp_path: Path):
     run_dir = tmp_path / "binary_run"
     run_dir.mkdir()

@@ -37,9 +37,15 @@ class SamaraSelectionPackets:
         stratify: bool = True,
         subject: str | None = None,
         simulation_seed: int | None = None,
+        protocol: str | None = None,
     ) -> None:
         if not phrase:
             raise ValueError("phrase must be a non-empty string")
+        if protocol is not None and protocol != PROTOCOL:
+            raise ValueError(
+                f"SamaraSelectionPackets protocol must be {PROTOCOL!r}, got {protocol!r}"
+            )
+        self.protocol = PROTOCOL
         self.path = path
         self.phrase = phrase
         self.r_max = int(r_max)
@@ -167,7 +173,7 @@ class SamaraSelectionPackets:
             test=None,
             metadata={
                 "pipeline": "SamaraSelectionPackets",
-                "protocol": PROTOCOL,
+                "protocol": self.protocol,
                 "label_source": "simulated",
                 "path": str(resolved),
                 "phrase": self.phrase,

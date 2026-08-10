@@ -5,6 +5,7 @@
   "data": {
     "pipeline": "BCI3SelectionPackets",
     "params": {
+      "protocol": "bci3_rowcol",
       "train_mat": "matrix_dataset/Subject_A_Train.mat",
       "test_mat": "matrix_dataset/Subject_A_Test.mat",
       "eloc_path": "matrix_dataset/eloc64.loc",

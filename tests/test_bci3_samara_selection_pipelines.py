@@ -39,6 +39,52 @@ def test_selection_packet_pipelines_registered():
     assert "SyntheticSelectionPackets" in names
 
 
+def test_bci3_selection_packets_accepts_matching_protocol(tmp_path):
+    train_mat = tmp_path / "Subject_A_Train.mat"
+    eloc = tmp_path / "eloc64.loc"
+    train_mat.write_bytes(b"x")
+    eloc.write_text("dummy")
+    pipe = get_pipeline("BCI3SelectionPackets")(
+        train_mat=str(train_mat),
+        eloc_path=str(eloc),
+        protocol="bci3_rowcol",
+    )
+    assert pipe.protocol == "bci3_rowcol"
+
+
+def test_bci3_selection_packets_rejects_mismatched_protocol(tmp_path):
+    train_mat = tmp_path / "Subject_A_Train.mat"
+    eloc = tmp_path / "eloc64.loc"
+    train_mat.write_bytes(b"x")
+    eloc.write_text("dummy")
+    with pytest.raises(ValueError, match="protocol"):
+        get_pipeline("BCI3SelectionPackets")(
+            train_mat=str(train_mat),
+            eloc_path=str(eloc),
+            protocol="samara_single_flash_sim",
+        )
+
+
+def test_samara_selection_packets_accepts_matching_protocol(tmp_path):
+    data_dir = tmp_path / "Samara_data"
+    data_dir.mkdir()
+    pipe = get_pipeline("SamaraSelectionPackets")(
+        path=str(data_dir),
+        protocol="samara_single_flash_sim",
+    )
+    assert pipe.protocol == "samara_single_flash_sim"
+
+
+def test_samara_selection_packets_rejects_mismatched_protocol(tmp_path):
+    data_dir = tmp_path / "Samara_data"
+    data_dir.mkdir()
+    with pytest.raises(ValueError, match="protocol"):
+        get_pipeline("SamaraSelectionPackets")(
+            path=str(data_dir),
+            protocol="bci3_rowcol",
+        )
+
+
 def test_bci3_selection_packets_monkeypatched(monkeypatch, tmp_path):
     train_mat = tmp_path / "Subject_A_Train.mat"
     test_mat = tmp_path / "Subject_A_Test.mat"
