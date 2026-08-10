@@ -42,9 +42,53 @@ def build_basecnn(**params: Any):
     return BaseCNN(**params)
 
 
+_ENCODER_KEYS = (
+    "d_model",
+    "nhead",
+    "num_layers",
+    "dim_feedforward",
+    "dropout",
+    "max_flashes",
+    "max_repetitions",
+    "num_stimulus_codes",
+)
+
+_SC_KEYS = ("head_mode", "include_character_head", "n_cells")
+
+
+def _build_sequence_encoder(**params: Any):
+    params = dict(params)
+    eegnet_params = _map_n_channels(dict(params.pop("eegnet", {})))
+    from pattern_recognition.models.cnn import EEGNet, P300SequenceEncoder
+
+    eegnet = EEGNet(**eegnet_params)
+    encoder_params = {k: params.pop(k) for k in _ENCODER_KEYS if k in params}
+    return P300SequenceEncoder(eegnet, **encoder_params)
+
+
+@register_model("ContextualTransformer")
+def build_contextual_transformer(**params: Any):
+    from pattern_recognition.models.cnn import ContextualTransformer
+
+    encoder = _build_sequence_encoder(**params)
+    return ContextualTransformer(encoder)
+
+
+@register_model("SequenceClassifier")
+def build_sequence_classifier(**params: Any):
+    from pattern_recognition.models.cnn import SequenceClassifier
+
+    params = dict(params)
+    sc_params = {k: params.pop(k) for k in _SC_KEYS if k in params}
+    encoder = _build_sequence_encoder(**params)
+    return SequenceClassifier(encoder, **sc_params)
+
+
 __all__ = [
     "build_basecnn",
+    "build_contextual_transformer",
     "build_eegnet",
+    "build_sequence_classifier",
     "get_model",
     "list_models",
     "register_model",
