@@ -9,6 +9,8 @@ from pattern_recognition.speller.online import DecodeMode, online_decode
 from pattern_recognition.speller.types import Selection
 from pattern_recognition.training.metrics import compute_itr
 
+ScoreFn = Callable[[Selection, int], np.ndarray]
+
 
 def selection_duration_s(n_flashes_used: int, soa_s: float) -> float:
     return float(n_flashes_used * soa_s)
@@ -22,7 +24,7 @@ def _itr_bits_per_min(char_acc: float, n_classes: int, duration_s: float) -> flo
 
 def evaluate_selections(
     selections: list[Selection],
-    scores_per_sel: list[np.ndarray],
+    scores_per_sel: list[np.ndarray] | None,
     decode_fn: Callable[[np.ndarray, Selection, int], str],
     repetitions: list[int],
     n_classes: int,
@@ -33,15 +35,30 @@ def evaluate_selections(
     grid: GridSpec,
     early_stop: bool = False,
     margin_tau: float | None = None,
+    score_fn: ScoreFn | None = None,
 ) -> dict:
+    """Evaluate character decode across repetitions.
+
+    Provide either ``scores_per_sel`` (one full-selection score vector per
+    selection; independent flash scorers) or ``score_fn(selection, r)`` for
+    contextual models that must re-score with only ``repeat_index < r``.
+    """
+    if (scores_per_sel is None) == (score_fn is None):
+        raise ValueError("provide exactly one of scores_per_sel or score_fn")
+    if scores_per_sel is not None and len(scores_per_sel) != len(selections):
+        raise ValueError("scores_per_sel length must match selections")
+
     predictions: list[dict] = []
     correct_at_r: dict[int, list[bool]] = {r: [] for r in repetitions}
 
-    for selection_id, (selection, scores) in enumerate(
-        zip(selections, scores_per_sel, strict=True)
-    ):
+    for selection_id, selection in enumerate(selections):
         subject = selection.meta.get("subject")
         for r in repetitions:
+            if score_fn is not None:
+                scores = score_fn(selection, r)
+            else:
+                assert scores_per_sel is not None
+                scores = scores_per_sel[selection_id]
             pred = decode_fn(scores, selection, r)
             is_correct = pred == selection.target_char
             correct_at_r[r].append(is_correct)
@@ -73,17 +90,31 @@ def evaluate_selections(
         r_max = max(repetitions)
         early_correct: list[bool] = []
         repeats_used: list[int] = []
-        for selection, scores in zip(selections, scores_per_sel, strict=True):
-            steps = online_decode(
-                selection,
-                scores,
-                decode_fn,
-                r_max=r_max,
-                early_stop=True,
-                margin_tau=margin_tau,
-                mode=mode,
-                grid=grid,
-            )
+        for selection_id, selection in enumerate(selections):
+            if score_fn is not None:
+                steps = online_decode(
+                    selection,
+                    None,
+                    decode_fn,
+                    r_max=r_max,
+                    early_stop=True,
+                    margin_tau=margin_tau,
+                    mode=mode,
+                    grid=grid,
+                    score_fn=score_fn,
+                )
+            else:
+                assert scores_per_sel is not None
+                steps = online_decode(
+                    selection,
+                    scores_per_sel[selection_id],
+                    decode_fn,
+                    r_max=r_max,
+                    early_stop=True,
+                    margin_tau=margin_tau,
+                    mode=mode,
+                    grid=grid,
+                )
             final_step = steps[-1]
             early_correct.append(final_step["pred"] == selection.target_char)
             repeats_used.append(final_step["r"])

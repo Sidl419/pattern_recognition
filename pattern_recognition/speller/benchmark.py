@@ -85,7 +85,12 @@ class RunFlashScorer:
 
 
 class ContextualFlashScorer:
-    """Score flashes with a ContextualTransformer via packed selection packets."""
+    """Score flashes with a ContextualTransformer via packed selection packets.
+
+    When ``r`` is set, only flashes with ``repeat_index < r`` are packed so the
+    Transformer never attends to future repetitions. Returned vector is always
+    full selection length; positions with ``repeat_index >= r`` are zero.
+    """
 
     def __init__(
         self,
@@ -97,8 +102,10 @@ class ContextualFlashScorer:
         self._device = device
         self._protocol = protocol
 
-    def predict_scores(self, selection: Selection) -> np.ndarray:
-        packed = pack_selection(selection, protocol=self._protocol)
+    def predict_scores(
+        self, selection: Selection, r: int | None = None
+    ) -> np.ndarray:
+        packed = pack_selection(selection, protocol=self._protocol, r=r)
         epochs = packed["epochs"].unsqueeze(0).to(self._device)
         stimulus_codes = packed["stimulus_codes"].unsqueeze(0).to(self._device)
         repetitions = packed["repetitions"].unsqueeze(0).to(self._device)
@@ -112,8 +119,14 @@ class ContextualFlashScorer:
                 repetitions=repetitions,
                 valid_mask=valid_mask,
             )
-        scores = flash_logits[0][out_mask[0]]
-        return scores.detach().cpu().numpy()
+        prefix = flash_logits[0][out_mask[0]].detach().cpu().numpy()
+        n = len(selection.stimulus_ids)
+        if r is None:
+            return prefix
+        scores = np.zeros(n, dtype=np.float32)
+        keep = selection.repeat_index < r
+        scores[keep] = prefix
+        return scores
 
 
 def load_flash_scorer_from_run(
@@ -518,21 +531,39 @@ def run_speller_benchmark(
 
     started_at = datetime.now(timezone.utc)
     selections = _build_selections(cfg, protocol, run_dir)
-    scores_per_sel = [scorer.predict_scores(sel) for sel in selections]
 
-    eval_result = evaluate_selections(
-        selections,
-        scores_per_sel,
-        protocol.decode,
-        cfg.repetitions,
-        n_classes=protocol.grid.n_rows * protocol.grid.n_cols,
-        soa_s=protocol.soa_s,
-        flashes_per_repeat=protocol.flashes_per_repeat,
-        mode=mode,
-        grid=protocol.grid,
-        early_stop=cfg.online.early_stop,
-        margin_tau=cfg.online.margin_tau,
-    )
+    # CT attends across flashes: re-score at each r with pack_selection(..., r=r).
+    # Independent CNNs keep one-shot scoring (subset by r only at decode).
+    if isinstance(scorer, ContextualFlashScorer):
+        eval_result = evaluate_selections(
+            selections,
+            None,
+            protocol.decode,
+            cfg.repetitions,
+            n_classes=protocol.grid.n_rows * protocol.grid.n_cols,
+            soa_s=protocol.soa_s,
+            flashes_per_repeat=protocol.flashes_per_repeat,
+            mode=mode,
+            grid=protocol.grid,
+            early_stop=cfg.online.early_stop,
+            margin_tau=cfg.online.margin_tau,
+            score_fn=lambda sel, r: scorer.predict_scores(sel, r=r),
+        )
+    else:
+        scores_per_sel = [scorer.predict_scores(sel) for sel in selections]
+        eval_result = evaluate_selections(
+            selections,
+            scores_per_sel,
+            protocol.decode,
+            cfg.repetitions,
+            n_classes=protocol.grid.n_rows * protocol.grid.n_cols,
+            soa_s=protocol.soa_s,
+            flashes_per_repeat=protocol.flashes_per_repeat,
+            mode=mode,
+            grid=protocol.grid,
+            early_stop=cfg.online.early_stop,
+            margin_tau=cfg.online.margin_tau,
+        )
 
     speller_dir = _resolve_speller_dir(run_dir, cfg.tag)
     speller_dir.mkdir(parents=True, exist_ok=False)

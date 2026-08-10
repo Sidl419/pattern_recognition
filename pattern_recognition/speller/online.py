@@ -47,7 +47,7 @@ def _margin_at_r(
 
 def online_decode(
     selection: Selection,
-    scores: np.ndarray,
+    scores: np.ndarray | None,
     decode_fn: Callable[[np.ndarray, Selection, int], str],
     r_max: int,
     early_stop: bool,
@@ -55,17 +55,25 @@ def online_decode(
     *,
     mode: DecodeMode,
     grid: GridSpec,
+    score_fn: Callable[[Selection, int], np.ndarray] | None = None,
 ) -> list[dict]:
     """Cumulative decode for r=1..r_max with optional margin early-stop.
 
     ``mode`` and ``grid`` are required so margin aggregation does not guess
     row×col vs single-flash from stimulus id ranges.
+
+    Provide either a static ``scores`` vector (independent flash scorers) or
+    ``score_fn(selection, r)`` for contextual models that re-score at each ``r``.
     """
+    if (scores is None) == (score_fn is None):
+        raise ValueError("provide exactly one of scores or score_fn")
     steps: list[dict] = []
     for r in range(1, r_max + 1):
-        pred = decode_fn(scores, selection, r)
+        step_scores = score_fn(selection, r) if score_fn is not None else scores
+        assert step_scores is not None
+        pred = decode_fn(step_scores, selection, r)
         margin = _margin_at_r(
-            scores,
+            step_scores,
             selection.stimulus_ids,
             selection.repeat_index,
             r,
