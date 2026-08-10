@@ -2,7 +2,13 @@
 
 from pattern_recognition.data.pipelines import bci3_pz as _bci3_pz  # noqa: F401
 from pattern_recognition.data.pipelines import (
+    bci3_selection as _bci3_selection,  # noqa: F401
+)
+from pattern_recognition.data.pipelines import (
     samara_average as _samara_average,  # noqa: F401
+)
+from pattern_recognition.data.pipelines import (
+    samara_selection as _samara_selection,  # noqa: F401
 )
 from pattern_recognition.data.pipelines import (
     samara_time_shift as _samara_time_shift,  # noqa: F401

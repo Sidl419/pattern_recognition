@@ -89,16 +89,20 @@ Example configs: [`configs/speller_bci3_within.json`](configs/speller_bci3_withi
 
 ## Models
 
-| Model | Role |
-|---|---|
-| `EEGNet` | Compact CNN baseline for P300 / epoch-averaged windows (runner registry) |
-| `BaseCNN` | Simple 1D-CNN baseline (runner registry) |
-| `DeepConvNet`, `CecottiCNN`, `BaseCNNAttn`, `FlexCNN` | Additional CNN variants (importable; not all registered for the runner) |
-| SVM (RBF) | Classical baseline in historical epoch-averaging notebooks |
-| `BaseGNN`, `GIN`, `STGCN`, … | Static-graph GNN family for 64-ch / SEED notebooks |
-| `EdgeLearnGNN`, `PriorEdgeLearnGNN`, `PairEdgeLearnGNN`, … | Adaptive / learned-edge GNNs |
+| Model | Supervision | Speller `model_mode` | Notes |
+|---|---|---|---|
+| `EEGNet` | target / non-target per flash | `flash_scorer` | Binary epoch pipelines; protocol accumulation decode |
+| `ContextualTransformer` | target / non-target per flash (contextual) | `flash_scorer` | Selection-packet pipelines; same accumulation as EEGNet |
+| `SequenceClassifier` | row+col / cell (protocol heads) | `selection_classifier` | Selection-packet pipelines; direct symbol decode |
+| `BaseCNN` | binary epochs | `flash_scorer` | Simple 1D-CNN baseline |
+| `DeepConvNet`, `CecottiCNN`, `BaseCNNAttn`, `FlexCNN` | — | — | Importable; not all registered for the runner |
+| SVM (RBF) | — | — | Classical baseline in historical notebooks |
+| `BaseGNN`, `GIN`, `STGCN`, … | — | — | Static-graph GNN family for 64-ch / SEED notebooks |
+| `EdgeLearnGNN`, `PriorEdgeLearnGNN`, … | — | — | Adaptive / learned-edge GNNs |
 
-Runner v1 registers **`EEGNet`** and **`BaseCNN`**. GNN models remain importable for notebooks.
+Runner registers **`EEGNet`**, **`BaseCNN`**, **`ContextualTransformer`**, and **`SequenceClassifier`**.
+
+**Three-way P300 comparison** (BCI3 or Samara): train EEGNet on a binary pipeline, CT/SC on `BCI3SelectionPackets` / `SamaraSelectionPackets`, then evaluate with matching speller configs (`flash_scorer` for EEGNet/CT, `selection_classifier` for SC). Stimulus pad index is `0`; BCI3 model codes `1..12` (`num_stimulus_codes=13`), Samara cells `1..16` (`num_stimulus_codes=17`). Samara sequence runs always use `label_source: simulated`. See [`docs/superpowers/specs/2026-08-10-p300-sequence-models-design.md`](docs/superpowers/specs/2026-08-10-p300-sequence-models-design.md).
 
 ## Metrics
 

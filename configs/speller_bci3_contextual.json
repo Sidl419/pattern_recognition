@@ -1,0 +1,23 @@
+{
+  "tag": "bci3_ct_flash_scorer_r15",
+  "model_mode": "flash_scorer",
+  "protocol": "bci3_rowcol",
+  "subject_mode": "within_subject",
+  "test_subjects": null,
+  "repetitions": [1, 2, 5, 10, 15],
+  "online": {"early_stop": false, "margin_tau": null},
+  "run_dir": "results/<bci3_contextual_transformer_run>/",
+  "split": null,
+  "simulation": null,
+  "use_synthetic": false,
+  "protocol_params": {
+    "test_mat": "matrix_dataset/Subject_A_Test.mat",
+    "eloc_path": "matrix_dataset/eloc64.loc",
+    "subject": "A",
+    "channel_name": "Pz",
+    "filter": true
+  },
+  "allow_split_mismatch": false,
+  "allow_train_pool_eval": false,
+  "plots": true
+}

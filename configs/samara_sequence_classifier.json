@@ -1,0 +1,47 @@
+{
+  "name": "samara_sequence_classifier",
+  "seed": 0,
+  "device": "auto",
+  "data": {
+    "pipeline": "SamaraSelectionPackets",
+    "params": {
+      "path": "Samara_data/",
+      "phrase": "JUST_DO_IT",
+      "r_max": 10,
+      "channel_idx": 1,
+      "epoch_len": 250,
+      "file_pattern": "S*-P300_classic.mat",
+      "seed": 0,
+      "epoch_holdout": 0.3,
+      "val_fraction": 0.2,
+      "stratify": true
+    }
+  },
+  "model": {
+    "name": "SequenceClassifier",
+    "params": {
+      "eegnet": {
+        "n_channels": 1,
+        "input_feat_dim": 250
+      },
+      "d_model": 64,
+      "nhead": 4,
+      "num_layers": 2,
+      "num_stimulus_codes": 17,
+      "max_flashes": 160,
+      "max_repetitions": 10,
+      "head_mode": "cell",
+      "n_cells": 16
+    }
+  },
+  "train": {
+    "lr": 0.0001,
+    "weight_decay": 0.01,
+    "batch_size": 8,
+    "num_epochs": 50,
+    "step_size": 20,
+    "gamma": 0.5,
+    "save_model": true
+  },
+  "output_dir": "results/"
+}

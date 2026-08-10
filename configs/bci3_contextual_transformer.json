@@ -1,0 +1,41 @@
+{
+  "name": "bci3_contextual_transformer",
+  "seed": 0,
+  "device": "auto",
+  "data": {
+    "pipeline": "BCI3SelectionPackets",
+    "params": {
+      "train_mat": "matrix_dataset/Subject_A_Train.mat",
+      "test_mat": "matrix_dataset/Subject_A_Test.mat",
+      "eloc_path": "matrix_dataset/eloc64.loc",
+      "subject": "A",
+      "channel_name": "Pz",
+      "filter": true
+    }
+  },
+  "model": {
+    "name": "ContextualTransformer",
+    "params": {
+      "eegnet": {
+        "n_channels": 1,
+        "input_feat_dim": 72
+      },
+      "d_model": 64,
+      "nhead": 4,
+      "num_layers": 2,
+      "num_stimulus_codes": 13,
+      "max_flashes": 180,
+      "max_repetitions": 15
+    }
+  },
+  "train": {
+    "lr": 0.0001,
+    "weight_decay": 0.01,
+    "batch_size": 8,
+    "num_epochs": 50,
+    "step_size": 20,
+    "gamma": 0.5,
+    "save_model": true
+  },
+  "output_dir": "results/"
+}
