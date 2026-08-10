@@ -17,6 +17,13 @@
     "seed": 0,
     "phrase": "JUST_DO_IT"
   },
+  "use_synthetic": false,
+  "protocol_params": {
+    "path": "Samara_data/",
+    "channel_idx": 1,
+    "epoch_len": 250,
+    "file_pattern": "S*-P300_classic.mat"
+  },
   "allow_split_mismatch": false,
   "allow_train_pool_eval": false,
   "plots": true

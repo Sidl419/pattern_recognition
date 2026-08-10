@@ -9,6 +9,14 @@
   "run_dir": "results/<binary_run>/",
   "split": null,
   "simulation": null,
+  "use_synthetic": false,
+  "protocol_params": {
+    "test_mat": "matrix_dataset/Subject_A_Test.mat",
+    "eloc_path": "matrix_dataset/eloc64.loc",
+    "subject": "A",
+    "channel_name": "Pz",
+    "filter": true
+  },
   "allow_split_mismatch": false,
   "allow_train_pool_eval": false,
   "plots": true

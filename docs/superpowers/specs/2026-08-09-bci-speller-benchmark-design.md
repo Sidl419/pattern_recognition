@@ -1,7 +1,7 @@
 # BCI speller benchmark design
 
 **Date:** 2026-08-09  
-**Status:** Approved — implementation plan `docs/superpowers/plans/2026-08-10-bci-speller-benchmark.md`  
+**Status:** Approved — implementation plan `docs/superpowers/plans/2026-08-10-bci-speller-benchmark.md`. Real EEG selection loading is required by default (`use_synthetic: false`); synthetic flashes are CI-only.  
 **Scope:** Character-level evaluation and online-selection simulation on top of existing binary P300 models; unified benchmark API for BCI Competition III and Samara; optional slot for end-to-end selection classifiers.
 
 **Related:** `docs/superpowers/specs/2026-08-08-package-and-experiment-runner-design.md` (binary train → `results/<run>/`).

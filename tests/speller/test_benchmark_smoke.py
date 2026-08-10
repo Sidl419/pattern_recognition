@@ -45,6 +45,7 @@ def _smoke_config(run_dir: Path, *, tag: str = "smoke") -> dict:
             "val_fraction": 0.2,
         },
         "simulation": {"seed": 0, "phrase": "JU"},
+        "use_synthetic": True,
     }
 
 

@@ -180,7 +180,14 @@ def _validate_binary_split(cfg: SpellerBenchmarkConfig, run_dir: Path) -> None:
         )
 
 
-def _build_selections(
+def _load_binary_config(run_dir: Path) -> dict:
+    path = run_dir / "config.json"
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text())
+
+
+def _build_synthetic_selections(
     cfg: SpellerBenchmarkConfig, protocol: SpellerProtocol
 ) -> list[Selection]:
     r_max = max(cfg.repetitions)
@@ -190,7 +197,7 @@ def _build_selections(
         phrase_len = len(cfg.simulation.phrase)
         holdout = cfg.split.epoch_holdout if cfg.split is not None else 0.3
         min_eval_epochs = phrase_len * n_cells * r_max
-        n_epochs = max(200, int(min_eval_epochs / holdout * 2))
+        n_epochs = max(200, int(min_eval_epochs / max(holdout, 1e-6) * 2))
         kwargs: dict = {
             "phrase": cfg.simulation.phrase,
             "r_max": r_max,
@@ -210,6 +217,98 @@ def _build_selections(
         subject=subject,
         seed=_simulation_seed(cfg),
     )
+
+
+def _build_real_selections(
+    cfg: SpellerBenchmarkConfig,
+    protocol: SpellerProtocol,
+    run_dir: Path,
+) -> list[Selection]:
+    from pattern_recognition.speller.data_loading import (
+        build_bci3_selections_from_mat,
+        build_samara_selections_from_dir,
+        merge_protocol_params,
+    )
+
+    params = merge_protocol_params(
+        _load_binary_config(run_dir), cfg.protocol_params
+    )
+    r_max = max(cfg.repetitions)
+
+    if cfg.protocol == "samara_single_flash_sim":
+        assert cfg.simulation is not None
+        assert cfg.split is not None or cfg.allow_train_pool_eval
+        data_path = params.get("path")
+        if not data_path:
+            raise FileNotFoundError(
+                "Samara real-data benchmark requires data path: set "
+                "binary run config data.params.path or "
+                "speller protocol_params.path (e.g. Samara_data/). "
+                "For CI-only random flashes set use_synthetic=true."
+            )
+        holdout = (
+            cfg.split.epoch_holdout
+            if cfg.split is not None
+            else float(params.get("val_fraction", 0.2))
+        )
+        seed = cfg.split.seed if cfg.split is not None else int(params.get("seed", 0))
+        stratify = cfg.split.stratify if cfg.split is not None else True
+        subjects = None
+        if cfg.subject_mode == "within_subject" and params.get("subject"):
+            subjects = [str(params["subject"])]
+        elif cfg.test_subjects:
+            subjects = list(cfg.test_subjects)
+        return build_samara_selections_from_dir(
+            data_path,
+            phrase=cfg.simulation.phrase,
+            r_max=r_max,
+            epoch_holdout=holdout,
+            seed=seed,
+            stratify=stratify,
+            channel_idx=int(params.get("channel_idx", 1)),
+            epoch_len=int(params.get("epoch_len", 250)),
+            file_pattern=str(
+                params.get("file_pattern", "S*-P300_classic.mat")
+            ),
+            subjects=subjects,
+            simulation_seed=_simulation_seed(cfg),
+        )
+
+    # bci3_rowcol
+    test_mat = params.get("test_mat") or params.get("mat_path")
+    eloc_path = params.get("eloc_path")
+    if not test_mat or not eloc_path:
+        raise FileNotFoundError(
+            "BCI3 real-data benchmark requires test_mat and eloc_path via "
+            "binary run config data.params or speller protocol_params. "
+            "For CI-only random flashes set use_synthetic=true."
+        )
+    subject = str(params.get("subject", "A")).upper()
+    if cfg.test_subjects:
+        subject = str(cfg.test_subjects[0]).upper()
+    return build_bci3_selections_from_mat(
+        test_mat,
+        eloc_path=eloc_path,
+        subject=subject,
+        channel_name=str(params.get("channel_name", "Pz")),
+        n_channels=int(params.get("n_channels", 64)),
+        sfreq=float(params.get("sfreq", 120.0)),
+        sample_size=int(params.get("sample_size", 72)),
+        apply_filter=bool(params.get("filter", True)),
+        test_chars=params.get("test_chars"),
+        max_repetitions=r_max,
+        max_chars=params.get("max_chars"),
+    )
+
+
+def _build_selections(
+    cfg: SpellerBenchmarkConfig,
+    protocol: SpellerProtocol,
+    run_dir: Path,
+) -> list[Selection]:
+    if cfg.use_synthetic:
+        return _build_synthetic_selections(cfg, protocol)
+    return _build_real_selections(cfg, protocol, run_dir)
 
 
 def _resolve_scorer(
@@ -287,7 +386,7 @@ def run_speller_benchmark(
     scorer = _resolve_scorer(cfg, run_dir, scores_provider)
 
     started_at = datetime.now(timezone.utc)
-    selections = _build_selections(cfg, protocol)
+    selections = _build_selections(cfg, protocol, run_dir)
     scores_per_sel = [scorer.predict_scores(sel) for sel in selections]
 
     eval_result = evaluate_selections(
@@ -319,6 +418,7 @@ def run_speller_benchmark(
         "protocol": cfg.protocol,
         "label_source": protocol.label_source,
         "subject_mode": cfg.subject_mode,
+        "use_synthetic": cfg.use_synthetic,
         "split_seed": _split_seed(cfg),
         "simulation_seed": _simulation_seed(cfg),
         "allow_split_mismatch": cfg.allow_split_mismatch,

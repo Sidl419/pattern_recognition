@@ -134,6 +134,7 @@ def test_benchmark_writes_plots_when_enabled(tmp_path):
             "val_fraction": 0.2,
         },
         "simulation": {"seed": 0, "phrase": "JU"},
+        "use_synthetic": True,
     }
 
     out = run_speller_benchmark(config, scores_provider=oracle)
@@ -163,6 +164,7 @@ def test_benchmark_skips_plots_when_disabled(tmp_path):
             "val_fraction": 0.2,
         },
         "simulation": {"seed": 0, "phrase": "JU"},
+        "use_synthetic": True,
     }
 
     out = run_speller_benchmark(config, scores_provider=oracle)

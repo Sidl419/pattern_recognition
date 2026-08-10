@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional, Self
+from typing import Any, Literal, Optional, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -66,6 +66,9 @@ class SpellerBenchmarkConfig(BaseModel):
       benchmark load, not here).
     - When ``allow_train_pool_eval`` is true, record in ``meta.json`` and
       warn (enforced at benchmark run, not here).
+    - ``use_synthetic`` defaults to false: selections come from real EEG paths
+      in the binary ``run_dir`` config and/or ``protocol_params``. Set
+      ``use_synthetic=true`` only for CI / unit smoke (random synthetic flashes).
     """
 
     tag: str
@@ -80,6 +83,8 @@ class SpellerBenchmarkConfig(BaseModel):
     run_dir: str
     split: Optional[SplitConfig] = None
     simulation: Optional[SimulationConfig] = None
+    protocol_params: dict[str, Any] = Field(default_factory=dict)
+    use_synthetic: bool = False
     allow_split_mismatch: bool = False
     allow_train_pool_eval: bool = False
     plots: bool = True
