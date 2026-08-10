@@ -1,3 +1,5 @@
+"""SpellerBenchmarkConfig validation."""
+
 import pytest
 from pydantic import ValidationError
 
@@ -66,89 +68,75 @@ def test_bci3_cross_with_test_subjects_ok():
     assert cfg.test_subjects == ["B"]
 
 
-def test_bci3_rejects_epoch_holdout():
-    bad = {
-        **BCI3_WITHIN_OK,
-        "split": {
-            "seed": 0,
-            "epoch_holdout": 0.3,
-            "stratify": False,
-            "val_fraction": 0.2,
-        },
-    }
-    with pytest.raises(ValidationError, match="epoch_holdout"):
-        SpellerBenchmarkConfig.model_validate(bad)
+@pytest.mark.parametrize(
+    ("payload", "match"),
+    [
+        (
+            {
+                **BCI3_WITHIN_OK,
+                "split": {
+                    "seed": 0,
+                    "epoch_holdout": 0.3,
+                    "stratify": False,
+                    "val_fraction": 0.2,
+                },
+            },
+            "epoch_holdout",
+        ),
+        (
+            {
+                **BCI3_WITHIN_OK,
+                "split": {
+                    "seed": 0,
+                    "epoch_holdout": 0.0,
+                    "stratify": True,
+                    "val_fraction": 0.2,
+                },
+            },
+            "stratify",
+        ),
+        (
+            {**BCI3_WITHIN_OK, "simulation": {"phrase": "HELLO"}},
+            "simulation",
+        ),
+    ],
+)
+def test_bci3_rejects_invalid_coupling(payload, match):
+    with pytest.raises(ValidationError, match=match):
+        SpellerBenchmarkConfig.model_validate(payload)
 
 
-def test_bci3_rejects_stratify_when_split_set():
-    bad = {
-        **BCI3_WITHIN_OK,
-        "split": {
-            "seed": 0,
-            "epoch_holdout": 0.0,
-            "stratify": True,
-            "val_fraction": 0.2,
-        },
-    }
-    with pytest.raises(ValidationError, match="stratify"):
-        SpellerBenchmarkConfig.model_validate(bad)
+@pytest.mark.parametrize(
+    ("payload", "match"),
+    [
+        ({**SAMARA_OK, "split": None}, "split"),
+        ({**SAMARA_OK, "simulation": {"seed": 0, "phrase": ""}}, "phrase"),
+        ({**SAMARA_OK, "simulation": {"phrase": "XYZ"}}, "grid"),
+    ],
+)
+def test_samara_rejects_invalid_coupling(payload, match):
+    with pytest.raises(ValidationError, match=match):
+        SpellerBenchmarkConfig.model_validate(payload)
 
 
-def test_bci3_rejects_simulation_phrase():
-    bad = {
-        **BCI3_WITHIN_OK,
-        "simulation": {"phrase": "HELLO"},
-    }
-    with pytest.raises(ValidationError, match="simulation"):
-        SpellerBenchmarkConfig.model_validate(bad)
-
-
-def test_samara_requires_split():
-    bad = {**SAMARA_OK, "split": None}
-    with pytest.raises(ValidationError, match="split"):
-        SpellerBenchmarkConfig.model_validate(bad)
-
-
-def test_samara_requires_phrase():
-    bad = {**SAMARA_OK, "simulation": {"seed": 0, "phrase": ""}}
-    with pytest.raises(ValidationError, match="phrase"):
-        SpellerBenchmarkConfig.model_validate(bad)
-
-
-def test_samara_rejects_phrase_not_in_grid():
-    bad = {**SAMARA_OK, "simulation": {"phrase": "XYZ"}}
-    with pytest.raises(ValidationError, match="grid"):
-        SpellerBenchmarkConfig.model_validate(bad)
-
-
-def test_subject_mode_inside_split_rejected():
-    bad = {
-        **SAMARA_OK,
-        "split": {
-            "seed": 0,
-            "epoch_holdout": 0.3,
-            "stratify": True,
-            "val_fraction": 0.2,
-            "subject_mode": "within_subject",
-        },
-    }
-    with pytest.raises(ValidationError):
-        SpellerBenchmarkConfig.model_validate(bad)
-
-
-def test_test_subjects_inside_split_rejected():
-    bad = {
-        **SAMARA_OK,
-        "split": {
-            "seed": 0,
-            "epoch_holdout": 0.3,
-            "stratify": True,
-            "val_fraction": 0.2,
-            "test_subjects": ["B"],
-        },
+@pytest.mark.parametrize(
+    "extra_key_and_value",
+    [
+        ("subject_mode", "within_subject"),
+        ("test_subjects", ["B"]),
+    ],
+)
+def test_split_rejects_subject_policy_keys(extra_key_and_value):
+    extra_key, value = extra_key_and_value
+    split = {
+        "seed": 0,
+        "epoch_holdout": 0.3,
+        "stratify": True,
+        "val_fraction": 0.2,
+        extra_key: value,
     }
     with pytest.raises(ValidationError):
-        SpellerBenchmarkConfig.model_validate(bad)
+        SpellerBenchmarkConfig.model_validate({**SAMARA_OK, "split": split})
 
 
 def test_within_subject_rejects_test_subjects():
@@ -163,19 +151,11 @@ def test_cross_subject_requires_test_subjects():
         SpellerBenchmarkConfig.model_validate(bad)
 
 
-def test_early_stop_requires_tau():
+@pytest.mark.parametrize("margin_tau", [None, 0.0])
+def test_early_stop_requires_positive_tau(margin_tau):
     bad = {
         **BCI3_WITHIN_OK,
-        "online": {"early_stop": True, "margin_tau": None},
-    }
-    with pytest.raises(ValidationError, match="margin_tau"):
-        SpellerBenchmarkConfig.model_validate(bad)
-
-
-def test_early_stop_rejects_non_positive_tau():
-    bad = {
-        **BCI3_WITHIN_OK,
-        "online": {"early_stop": True, "margin_tau": 0.0},
+        "online": {"early_stop": True, "margin_tau": margin_tau},
     }
     with pytest.raises(ValidationError, match="margin_tau"):
         SpellerBenchmarkConfig.model_validate(bad)

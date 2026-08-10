@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import random
 from datetime import datetime, timezone
@@ -28,6 +29,27 @@ def _load_config(config: ExperimentConfig | dict | str | Path) -> ExperimentConf
     path = Path(config)
     payload = json.loads(path.read_text())
     return ExperimentConfig.model_validate(payload)
+
+
+def _pipeline_params(cfg: ExperimentConfig) -> dict[str, Any]:
+    """Merge data.params with shared ``split`` fields the pipeline accepts."""
+    params: dict[str, Any] = {**cfg.data.params}
+    params.setdefault("seed", cfg.seed)
+    if cfg.split is None:
+        return params
+
+    pipeline_cls = get_pipeline(cfg.data.pipeline)
+    accepted = set(inspect.signature(pipeline_cls.__init__).parameters)
+    split_kwargs = {
+        "seed": cfg.split.seed,
+        "epoch_holdout": cfg.split.epoch_holdout,
+        "val_fraction": cfg.split.val_fraction,
+        "stratify": cfg.split.stratify,
+    }
+    for key, value in split_kwargs.items():
+        if key in accepted:
+            params[key] = value
+    return params
 
 
 def _set_seed(seed: int) -> None:
@@ -61,8 +83,7 @@ def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
     _set_seed(cfg.seed)
 
     pipeline_cls = get_pipeline(cfg.data.pipeline)
-    params = {**cfg.data.params}
-    params.setdefault("seed", cfg.seed)
+    params = _pipeline_params(cfg)
     bundle = pipeline_cls(**params).build()
 
     dataloaders = {
@@ -100,6 +121,11 @@ def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
     (run_dir / "config.json").write_text(
         cfg.model_dump_json(indent=2) + "\n"
     )
+
+    if bundle.metadata.get("split_indices") is not None:
+        (run_dir / "split_indices.json").write_text(
+            json.dumps(bundle.metadata["split_indices"], indent=2) + "\n"
+        )
 
     finished_at = datetime.now(timezone.utc)
     run_meta = {

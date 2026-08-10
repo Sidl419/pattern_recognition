@@ -1,0 +1,39 @@
+{
+  "name": "samara_pz_basecnn_sc_n1",
+  "seed": 42,
+  "device": "auto",
+  "subject_mode": "within_subject",
+  "split": {
+    "seed": 0,
+    "epoch_holdout": 0.3,
+    "stratify": true,
+    "val_fraction": 0.2
+  },
+  "data": {
+    "pipeline": "SamaraWithinSubjectAverage",
+    "params": {
+      "path": "Samara_data/",
+      "channel_idx": 1,
+      "n_average": 1,
+      "mode": "SC",
+      "epoch_len": 250
+    }
+  },
+  "model": {
+    "name": "BaseCNN",
+    "params": {
+      "n_channels": 1,
+      "input_feat_dim": 250
+    }
+  },
+  "train": {
+    "lr": 0.0001,
+    "weight_decay": 0.01,
+    "batch_size": 64,
+    "num_epochs": 50,
+    "step_size": 20,
+    "gamma": 0.5,
+    "save_model": true
+  },
+  "output_dir": "results/"
+}

@@ -91,6 +91,7 @@ def evaluate_selections(
         result["early_stop"] = {
             "char_acc_early": float(np.mean(early_correct)) if early_correct else 0.0,
             "mean_repeats_used": float(np.mean(repeats_used)) if repeats_used else 0.0,
+            "repeats_used": [int(r) for r in repeats_used],
         }
 
     return result

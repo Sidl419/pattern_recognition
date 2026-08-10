@@ -19,7 +19,11 @@ from pattern_recognition.models import get_model
 from pattern_recognition.training.device import resolve_device
 from pattern_recognition.reporting.plots import save_speller_plots
 from pattern_recognition.speller.grids import COL_CODE, ROW_CODE
-from pattern_recognition.speller.metrics import evaluate_selections
+from pattern_recognition.speller.metrics import (
+    _itr_bits_per_min,
+    evaluate_selections,
+    selection_duration_s,
+)
 from pattern_recognition.speller.online import DecodeMode
 from pattern_recognition.speller.protocols import get_protocol
 from pattern_recognition.speller.protocols.base import SpellerProtocol
@@ -118,7 +122,9 @@ def load_flash_scorer_from_run(
 
     _, device = resolve_device(device_requested)
     model = get_model(exp_cfg.model.name)(**exp_cfg.model.params)
-    state = torch.load(checkpoint_path, map_location=device)
+    state = torch.load(
+        checkpoint_path, map_location=device, weights_only=True
+    )
     model.load_state_dict(state)
     model.to(device)
     return RunFlashScorer(model, device)
@@ -169,14 +175,68 @@ def _validate_binary_split(cfg: SpellerBenchmarkConfig, run_dir: Path) -> None:
     if not binary_cfg_path.is_file():
         return
     binary_cfg = json.loads(binary_cfg_path.read_text())
+
+    binary_subject_mode = binary_cfg.get("subject_mode", "within_subject")
+    if binary_subject_mode != cfg.subject_mode:
+        raise ValueError(
+            f"Speller subject_mode={cfg.subject_mode!r} does not match binary "
+            f"run subject_mode={binary_subject_mode!r}; set "
+            "allow_split_mismatch=true to override"
+        )
+    binary_test = binary_cfg.get("test_subjects") or None
+    speller_test = cfg.test_subjects or None
+    if binary_test != speller_test:
+        raise ValueError(
+            f"Speller test_subjects={speller_test!r} does not match binary "
+            f"run test_subjects={binary_test!r}; set "
+            "allow_split_mismatch=true to override"
+        )
+
+    if cfg.protocol != "samara_single_flash_sim":
+        return
+    if cfg.allow_train_pool_eval:
+        return
+
     binary_split = binary_cfg.get("split")
-    if binary_split is None or cfg.split is None:
+    if binary_split is None:
+        raise ValueError(
+            "Binary run config.json is missing split; Samara flash_scorer "
+            "benchmarks require a shared split block on the binary experiment "
+            "(seed, epoch_holdout, stratify, val_fraction). Re-train with "
+            "split in the experiment config, or set allow_split_mismatch=true "
+            "/ allow_train_pool_eval=true for exploratory runs."
+        )
+    if cfg.split is None:
         return
     speller_split = cfg.split.model_dump()
     if binary_split != speller_split:
         raise ValueError(
             "Speller split block does not match binary run config.json split; "
             "set allow_split_mismatch=true to override"
+        )
+
+
+def _validate_flash_scorer_input(
+    cfg: SpellerBenchmarkConfig, run_dir: Path
+) -> None:
+    """Require single-flash-compatible binary inputs for flash_scorer mode."""
+    if cfg.model_mode != "flash_scorer":
+        return
+    from pattern_recognition.speller.data_loading import merge_protocol_params
+
+    params = merge_protocol_params(
+        _load_binary_config(run_dir), cfg.protocol_params
+    )
+    if params.get("allow_averaged_flash_scorer"):
+        return
+    n_average = params.get("n_average")
+    if n_average is None:
+        return
+    if int(n_average) != 1:
+        raise ValueError(
+            f"flash_scorer expects binary data.params.n_average=1 (got "
+            f"{n_average}); train a single-flash checkpoint or set "
+            "protocol_params.allow_averaged_flash_scorer=true to override"
         )
 
 
@@ -246,13 +306,22 @@ def _build_real_selections(
                 "speller protocol_params.path (e.g. Samara_data/). "
                 "For CI-only random flashes set use_synthetic=true."
             )
-        holdout = (
-            cfg.split.epoch_holdout
-            if cfg.split is not None
-            else float(params.get("val_fraction", 0.2))
-        )
-        seed = cfg.split.seed if cfg.split is not None else int(params.get("seed", 0))
-        stratify = cfg.split.stratify if cfg.split is not None else True
+        use_train_pool = bool(cfg.allow_train_pool_eval)
+        if use_train_pool:
+            holdout = 0.0
+            seed = (
+                cfg.split.seed
+                if cfg.split is not None
+                else int(params.get("seed", 0))
+            )
+            stratify = (
+                cfg.split.stratify if cfg.split is not None else True
+            )
+        else:
+            assert cfg.split is not None
+            holdout = cfg.split.epoch_holdout
+            seed = cfg.split.seed
+            stratify = cfg.split.stratify
         subjects = None
         if cfg.subject_mode == "within_subject" and params.get("subject"):
             subjects = [str(params["subject"])]
@@ -272,6 +341,7 @@ def _build_real_selections(
             ),
             subjects=subjects,
             simulation_seed=_simulation_seed(cfg),
+            use_train_pool=use_train_pool,
         )
 
     # bci3_rowcol
@@ -311,6 +381,30 @@ def _build_selections(
     return _build_real_selections(cfg, protocol, run_dir)
 
 
+def _device_from_run(run_dir: Path) -> tuple[str | None, str | None]:
+    """Return ``(device_requested, device_resolved)`` from binary run artifacts."""
+    meta_path = run_dir / "run_meta.json"
+    if meta_path.is_file():
+        meta = json.loads(meta_path.read_text())
+        requested = meta.get("device_requested")
+        resolved = meta.get("device_resolved")
+        if requested is not None or resolved is not None:
+            return (
+                str(requested) if requested is not None else None,
+                str(resolved) if resolved is not None else None,
+            )
+    binary_cfg = _load_binary_config(run_dir)
+    requested = binary_cfg.get("device")
+    if requested is None:
+        return None, None
+    requested_s = str(requested)
+    try:
+        resolved, _ = resolve_device(requested_s)
+    except Exception:
+        return requested_s, None
+    return requested_s, resolved
+
+
 def _resolve_scorer(
     cfg: SpellerBenchmarkConfig,
     run_dir: Path,
@@ -327,7 +421,12 @@ def _resolve_scorer(
 
 
 def _per_subject_rows(
-    predictions: list[dict], repetitions: list[int]
+    predictions: list[dict],
+    repetitions: list[int],
+    *,
+    n_classes: int,
+    soa_s: float,
+    flashes_per_repeat: int,
 ) -> list[dict]:
     subjects = sorted(
         {row["subject"] for row in predictions if row.get("subject") is not None}
@@ -350,8 +449,16 @@ def _per_subject_rows(
                 char_acc = float(
                     np.mean([row["pred"] == row["true"] for row in subset])
                 )
-            row_out = {"subject": subject or "", "r": r, "char_acc": char_acc}
-            rows.append(row_out)
+            duration_s = selection_duration_s(flashes_per_repeat * r, soa_s)
+            itr = _itr_bits_per_min(char_acc, n_classes, duration_s)
+            rows.append(
+                {
+                    "subject": subject or "",
+                    "r": r,
+                    "char_acc": char_acc,
+                    "itr": itr,
+                }
+            )
     return rows
 
 
@@ -380,9 +487,11 @@ def run_speller_benchmark(
         )
 
     _validate_binary_split(cfg, run_dir)
+    _validate_flash_scorer_input(cfg, run_dir)
 
     protocol = get_protocol(cfg.protocol)
     mode = _decode_mode(protocol)
+    device_requested, device_resolved = _device_from_run(run_dir)
     scorer = _resolve_scorer(cfg, run_dir, scores_provider)
 
     started_at = datetime.now(timezone.utc)
@@ -423,6 +532,8 @@ def run_speller_benchmark(
         "simulation_seed": _simulation_seed(cfg),
         "allow_split_mismatch": cfg.allow_split_mismatch,
         "allow_train_pool_eval": cfg.allow_train_pool_eval,
+        "device_requested": device_requested,
+        "device_resolved": device_resolved,
         "started_at": started_at.isoformat(),
         "finished_at": finished_at.isoformat(),
         "n_selections": len(selections),
@@ -436,6 +547,15 @@ def run_speller_benchmark(
     }
     if "early_stop" in eval_result:
         speller_metrics["early_stop"] = eval_result["early_stop"]
+        repeats_used = eval_result["early_stop"].get("repeats_used") or []
+        _write_csv(
+            speller_dir / "early_stop_repeats.csv",
+            ["selection_id", "repeats_used"],
+            [
+                {"selection_id": i, "repeats_used": r}
+                for i, r in enumerate(repeats_used)
+            ],
+        )
     (speller_dir / "speller_metrics.json").write_text(
         json.dumps(speller_metrics, indent=2) + "\n"
     )
@@ -446,13 +566,13 @@ def run_speller_benchmark(
         eval_result["acc_vs_repeats"],
     )
 
-    per_subject = _per_subject_rows(eval_result["predictions"], cfg.repetitions)
-    for row in per_subject:
-        r = row["r"]
-        acc_point = next(
-            point for point in eval_result["acc_vs_repeats"] if point["r"] == r
-        )
-        row["itr"] = acc_point["itr"]
+    per_subject = _per_subject_rows(
+        eval_result["predictions"],
+        cfg.repetitions,
+        n_classes=protocol.grid.n_rows * protocol.grid.n_cols,
+        soa_s=protocol.soa_s,
+        flashes_per_repeat=protocol.flashes_per_repeat,
+    )
     _write_csv(
         speller_dir / "per_subject.csv",
         ["subject", "r", "char_acc", "itr"],

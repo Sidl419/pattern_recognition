@@ -4,20 +4,17 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 
+from pattern_recognition.experiment.schema import SplitConfig
 from pattern_recognition.speller.grids import SAMARA_GRID
 
-
-class SplitConfig(BaseModel):
-    """Epoch-level split parameters (Samara only; never subject policy)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    seed: int = 0
-    epoch_holdout: float = 0.3
-    stratify: bool = True
-    val_fraction: float = 0.2
+__all__ = [
+    "OnlineConfig",
+    "SimulationConfig",
+    "SpellerBenchmarkConfig",
+    "SplitConfig",
+]
 
 
 class SimulationConfig(BaseModel):

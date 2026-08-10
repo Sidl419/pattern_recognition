@@ -60,12 +60,17 @@ def test_load_flash_scorer_predicts_scores(tmp_path):
     assert np.all(np.isfinite(scores))
 
 
-def test_load_flash_scorer_missing_checkpoint(tmp_path):
+def test_load_flash_scorer_missing_artifacts(tmp_path):
     run_dir = _binary_run(tmp_path)
     (run_dir / "model.pt").unlink()
-
     with pytest.raises(FileNotFoundError, match="model checkpoint"):
         load_flash_scorer_from_run(run_dir, model_mode="flash_scorer")
+
+    empty = tmp_path / "empty_run"
+    empty.mkdir()
+    (empty / "model.pt").write_bytes(b"")
+    with pytest.raises(FileNotFoundError, match="config"):
+        load_flash_scorer_from_run(empty, model_mode="flash_scorer")
 
 
 def test_load_flash_scorer_selection_classifier_not_implemented(tmp_path):
@@ -73,12 +78,3 @@ def test_load_flash_scorer_selection_classifier_not_implemented(tmp_path):
 
     with pytest.raises(NotImplementedError, match="selection_classifier"):
         load_flash_scorer_from_run(run_dir, model_mode="selection_classifier")
-
-
-def test_load_flash_scorer_missing_config(tmp_path):
-    run_dir = tmp_path / "empty_run"
-    run_dir.mkdir()
-    (run_dir / "model.pt").write_bytes(b"")
-
-    with pytest.raises(FileNotFoundError, match="config"):
-        load_flash_scorer_from_run(run_dir, model_mode="flash_scorer")

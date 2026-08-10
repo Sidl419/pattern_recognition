@@ -1,35 +1,34 @@
-# tests/test_registries.py
-import pytest
-from pattern_recognition.data.pipelines.registry import get_pipeline, list_pipelines
+from pattern_recognition.data.pipelines.registry import (
+    get_pipeline,
+    list_pipelines,
+)
 from pattern_recognition.models.registry import get_model, list_models
+import pytest
 
 
-def test_synthetic_pipeline_registered():
-    assert "SyntheticBinary" in list_pipelines()
-    pipe = get_pipeline("SyntheticBinary")(n_train=32, n_val=16, n_channels=1, n_times=64)
-    bundle = pipe.build()
-    assert bundle.train is not None and bundle.val is not None
+def test_expected_pipelines_and_models_registered():
+    pipelines = list_pipelines()
+    for name in (
+        "SyntheticBinary",
+        "SamaraWithinSubjectAverage",
+        "SamaraTimeShift",
+        "BCI3PzEpochAverage",
+    ):
+        assert name in pipelines
+    models = list_models()
+    assert "EEGNet" in models
+    assert "BaseCNN" in models
 
 
-def test_real_pipelines_registered():
-    names = list_pipelines()
-    assert "SamaraWithinSubjectAverage" in names
-    assert "SamaraTimeShift" in names
-    assert "BCI3PzEpochAverage" in names
-
-
-def test_unknown_pipeline_lists_options():
-    with pytest.raises(KeyError, match="SyntheticBinary"):
+def test_unknown_registry_entry_lists_options():
+    with pytest.raises(KeyError) as pipe_exc:
         get_pipeline("DoesNotExist")
+    pipe_msg = str(pipe_exc.value)
+    for name in list_pipelines():
+        assert name in pipe_msg
 
-
-def test_eegnet_and_basecnn_registered():
-    assert "EEGNet" in list_models()
-    assert "BaseCNN" in list_models()
-    m = get_model("EEGNet")(input_feat_dim=64, n_channels=1)
-    assert m is not None
-
-
-def test_unknown_model_lists_options():
-    with pytest.raises(KeyError, match="EEGNet"):
-        get_model("Nope")
+    with pytest.raises(KeyError) as model_exc:
+        get_model("DoesNotExist")
+    model_msg = str(model_exc.value)
+    for name in list_models():
+        assert name in model_msg

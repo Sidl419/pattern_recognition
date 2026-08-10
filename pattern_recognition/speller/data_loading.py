@@ -5,16 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import mne
 import numpy as np
 import scipy.io as sio
 
-from pattern_recognition.data.averaging import standardize_per_sample
+from pattern_recognition.data.bci3_prep import prepare_bci3_pz_flashes
 from pattern_recognition.data.pipelines.bci3_pz import (
     DEFAULT_TEST_A_CHARS,
     DEFAULT_TEST_B_CHARS,
 )
-from pattern_recognition.data.p300 import P300Getter
 from pattern_recognition.data.time_shift import load_p300_subjects
 from pattern_recognition.speller.grids import SAMARA_GRID
 from pattern_recognition.speller.simulate import (
@@ -22,12 +20,6 @@ from pattern_recognition.speller.simulate import (
     stratified_epoch_holdout,
 )
 from pattern_recognition.speller.types import Selection
-
-
-def _flash_onsets(flashing: np.ndarray) -> np.ndarray:
-    flash = np.asarray(flashing).ravel()
-    idx = np.where(flash[:-1] != flash[1:])[0][1::2] + 1
-    return np.concatenate([[0], idx])
 
 
 def _repeat_index_from_codes(codes: np.ndarray) -> np.ndarray:
@@ -77,19 +69,10 @@ def build_bci3_selections_from_mat(
 ) -> list[Selection]:
     """Build ground-truth row×col selections from a BCI3 ``.mat`` file."""
     mat_path = Path(mat_path).expanduser().resolve()
-    eloc_path = Path(eloc_path).expanduser().resolve()
     if not mat_path.is_file():
         raise FileNotFoundError(f"BCI3 .mat not found: {mat_path}")
-    if not eloc_path.is_file():
-        raise FileNotFoundError(f"Electrode montage not found: {eloc_path}")
 
     raw = sio.loadmat(str(mat_path))
-    eloc = mne.channels.read_custom_montage(str(eloc_path))
-    if len(eloc.ch_names) != n_channels:
-        raise ValueError(
-            f"Montage has {len(eloc.ch_names)} channels but n_channels={n_channels}"
-        )
-
     target_chars = _resolve_bci3_target_chars(raw, subject, test_chars)
     n_chars = len(raw["Flashing"])
     if max_chars is not None:
@@ -99,39 +82,23 @@ def build_bci3_selections_from_mat(
             f"Only {len(target_chars)} target chars for {n_chars} character epochs"
         )
 
-    getter = P300Getter(
-        raw,
-        eloc,
+    flashes_list, codes_list, _onsets = prepare_bci3_pz_flashes(
+        mat_path,
+        eloc_path=eloc_path,
+        channel_name=channel_name,
         n_channels=n_channels,
         sfreq=sfreq,
         sample_size=sample_size,
-        target_chars=target_chars,
+        apply_filter=apply_filter,
+        target_chars=list(target_chars[:n_chars]),
+        max_chars=n_chars,
     )
-    names = [c.lower().strip(".") for c in eloc.ch_names]
-    ch_key = channel_name.lower().strip(".")
-    try:
-        ch_idx = names.index(ch_key)
-    except ValueError as exc:
-        raise KeyError(
-            f"Channel {channel_name!r} not in montage {eloc.ch_names}"
-        ) from exc
 
     selections: list[Selection] = []
-    for epoch_num in range(n_chars):
-        idx = _flash_onsets(raw["Flashing"][epoch_num])
-        if apply_filter:
-            data = getter.filter(raw["Signal"][epoch_num])
-        else:
-            data = raw["Signal"][epoch_num].T
-
-        flashes = []
-        for onset in idx:
-            flashes.append(data[ch_idx, onset : onset + sample_size])
-        flashes_arr = np.stack(flashes, axis=0).astype(np.float32)
-        flashes_arr = standardize_per_sample(flashes_arr)
-        flashes_arr = flashes_arr[:, np.newaxis, :]
-
-        codes = np.asarray(raw["StimulusCode"][epoch_num][idx], dtype=np.int64)
+    for epoch_num, (flashes_2d, codes) in enumerate(
+        zip(flashes_list, codes_list, strict=True)
+    ):
+        flashes_arr = flashes_2d[:, np.newaxis, :]
         repeat_index = _repeat_index_from_codes(codes)
         if max_repetitions is not None:
             keep = repeat_index < max_repetitions
@@ -150,6 +117,7 @@ def build_bci3_selections_from_mat(
                     "label_source": "ground_truth",
                     "char_index": epoch_num,
                     "mat_path": str(mat_path),
+                    "scaled_with_mne_scaler": True,
                 },
             )
         )
@@ -169,8 +137,13 @@ def build_samara_selections_from_dir(
     file_pattern: str = "S*-P300_classic.mat",
     subjects: list[str] | None = None,
     simulation_seed: int | None = None,
+    use_train_pool: bool = False,
 ) -> list[Selection]:
-    """Load Samara epochs and simulate single-flash selections on holdout pools."""
+    """Load Samara epochs and simulate single-flash selections on holdout pools.
+
+    When ``use_train_pool`` is true (exploratory), every epoch is eligible for
+    packing — including epochs that would be in the binary train pool.
+    """
     data_path = Path(data_path).expanduser().resolve()
     if not data_path.is_dir():
         raise FileNotFoundError(f"Samara data path not found: {data_path}")
@@ -200,12 +173,15 @@ def build_samara_selections_from_dir(
         y = np.asarray(labels[subj], dtype=np.int64)
         # Model / Dataset expect (n, C, T) for CNN scorers.
         epochs = x[:, np.newaxis, :]
-        _, eval_idx = stratified_epoch_holdout(
-            y,
-            epoch_holdout=epoch_holdout,
-            seed=seed + i,
-            stratify=stratify,
-        )
+        if use_train_pool or epoch_holdout <= 0.0:
+            eval_idx = np.arange(len(y))
+        else:
+            _, eval_idx = stratified_epoch_holdout(
+                y,
+                epoch_holdout=epoch_holdout,
+                seed=seed + i,
+                stratify=stratify,
+            )
         subj_sels = simulate_samara_selections(
             epochs,
             y,
@@ -221,6 +197,7 @@ def build_samara_selections_from_dir(
                 "subject": subj,
                 "label_source": "simulated",
                 "data_path": str(data_path),
+                "use_train_pool": use_train_pool,
             }
             selections.append(sel)
     return selections

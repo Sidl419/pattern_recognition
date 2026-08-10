@@ -1,28 +1,15 @@
 from __future__ import annotations
 
 import numpy as np
-from sklearn.model_selection import train_test_split
 
+from pattern_recognition.data.splits import stratified_epoch_holdout
 from pattern_recognition.speller.grids import SAMARA_GRID, GridSpec
 from pattern_recognition.speller.types import Selection
 
-
-def stratified_epoch_holdout(
-    y: np.ndarray,
-    epoch_holdout: float,
-    seed: int,
-    stratify: bool = True,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Split epoch indices into train and eval pools."""
-    indices = np.arange(len(y))
-    stratify_labels = y if stratify and len(np.unique(y)) > 1 else None
-    train_idx, eval_idx = train_test_split(
-        indices,
-        test_size=epoch_holdout,
-        random_state=seed,
-        stratify=stratify_labels,
-    )
-    return train_idx, eval_idx
+__all__ = [
+    "simulate_samara_selections",
+    "stratified_epoch_holdout",
+]
 
 
 def simulate_samara_selections(

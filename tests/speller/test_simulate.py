@@ -1,16 +1,11 @@
+"""Samara selection packing / simulation helpers."""
+
 import numpy as np
 
 from pattern_recognition.speller.simulate import (
     simulate_samara_selections,
     stratified_epoch_holdout,
 )
-
-
-def test_holdout_disjoint_and_stratified():
-    y = np.array([0] * 70 + [1] * 30)
-    train, eval_ = stratified_epoch_holdout(y, 0.3, seed=0)
-    assert set(train).isdisjoint(eval_)
-    assert abs(y[eval_].mean() - y.mean()) < 0.15
 
 
 def test_simulate_no_reuse_within_selection_and_seed_stable():

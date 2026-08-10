@@ -15,6 +15,7 @@ from pattern_recognition.data.averaging import (
 from pattern_recognition.data.datasets import CNNMatrixDataset
 from pattern_recognition.data.pipelines.base import DatasetBundle
 from pattern_recognition.data.pipelines.registry import register_pipeline
+from pattern_recognition.data.splits import three_way_epoch_split
 from pattern_recognition.data.time_shift import load_p300_subjects
 
 
@@ -37,7 +38,13 @@ class SamaraWithinSubjectAverage:
     epoch_len : int, default 250
         Truncate each raw epoch to this many samples (from onset).
     val_fraction : float, default 0.2
-        Per-subject validation fraction.
+        Fraction of the *train pool* used for validation (after holdout).
+    epoch_holdout : float, default 0.0
+        Fraction of epochs held out for speller eval. ``0`` keeps the legacy
+        train/val-only split (no speller holdout). When set (via shared
+        ``split``), holdout is disjoint from train/val.
+    stratify : bool, default True
+        Stratify epoch splits by label 0/1.
     seed : int, default 0
         Split / averaging RNG seed.
     subject : str, optional
@@ -53,6 +60,8 @@ class SamaraWithinSubjectAverage:
         file_pattern: str = "S*-P300_classic.mat",
         epoch_len: int = 250,
         val_fraction: float = 0.2,
+        epoch_holdout: float = 0.0,
+        stratify: bool = True,
         seed: int = 0,
         subject: str | None = None,
     ) -> None:
@@ -65,6 +74,8 @@ class SamaraWithinSubjectAverage:
         self.file_pattern = file_pattern
         self.epoch_len = epoch_len
         self.val_fraction = val_fraction
+        self.epoch_holdout = float(epoch_holdout)
+        self.stratify = stratify
         self.seed = seed
         self.subject = subject
 
@@ -96,24 +107,47 @@ class SamaraWithinSubjectAverage:
         train_y_parts: list[torch.Tensor] = []
         val_X_parts: list[torch.Tensor] = []
         val_y_parts: list[torch.Tensor] = []
+        split_indices: dict[str, dict[str, list[int]]] = {}
 
         for i, subj in enumerate(subjects):
             x = np.asarray(data[subj][:, : self.epoch_len], dtype=np.float32)
             y = np.asarray(labels[subj], dtype=np.int64)
-            x_tr, x_va, y_tr, y_va = train_test_split(
-                x,
-                y,
-                test_size=self.val_fraction,
-                shuffle=True,
-                random_state=self.seed + i,
-                stratify=y if len(np.unique(y)) > 1 else None,
-            )
+            subj_seed = self.seed + i
+
+            if self.epoch_holdout > 0.0:
+                train_idx, val_idx, eval_idx = three_way_epoch_split(
+                    y,
+                    epoch_holdout=self.epoch_holdout,
+                    val_fraction=self.val_fraction,
+                    seed=subj_seed,
+                    stratify=self.stratify,
+                )
+                x_tr, y_tr = x[train_idx], y[train_idx]
+                x_va, y_va = x[val_idx], y[val_idx]
+                split_indices[subj] = {
+                    "train": train_idx.astype(int).tolist(),
+                    "val": val_idx.astype(int).tolist(),
+                    "eval": eval_idx.astype(int).tolist(),
+                }
+            else:
+                x_tr, x_va, y_tr, y_va = train_test_split(
+                    x,
+                    y,
+                    test_size=self.val_fraction,
+                    shuffle=True,
+                    random_state=subj_seed,
+                    stratify=(
+                        y
+                        if self.stratify and len(np.unique(y)) > 1
+                        else None
+                    ),
+                )
 
             X_tr, y_tr_t = build_multichannel_subject_dataset_unique(
-                x_tr, y_tr, n_channels=self.n_average, seed=self.seed + i
+                x_tr, y_tr, n_channels=self.n_average, seed=subj_seed
             )
             X_va, y_va_t = build_multichannel_subject_dataset_unique(
-                x_va, y_va, n_channels=self.n_average, seed=self.seed + i + 1000
+                x_va, y_va, n_channels=self.n_average, seed=subj_seed + 1000
             )
             if self.mode == "SC":
                 X_tr = multichannel_to_single_channel(X_tr)
@@ -135,21 +169,26 @@ class SamaraWithinSubjectAverage:
         val_ds = CNNMatrixDataset(
             (X_val, y_val), with_target=True, num_classes=2
         )
+        metadata: dict = {
+            "pipeline": "SamaraWithinSubjectAverage",
+            "path": str(resolved),
+            "channel_idx": self.channel_idx,
+            "n_average": self.n_average,
+            "mode": self.mode,
+            "epoch_len": self.epoch_len,
+            "val_fraction": self.val_fraction,
+            "epoch_holdout": self.epoch_holdout,
+            "stratify": self.stratify,
+            "seed": self.seed,
+            "subjects": subjects,
+            "n_train": len(train_ds),
+            "n_val": len(val_ds),
+        }
+        if split_indices:
+            metadata["split_indices"] = split_indices
         return DatasetBundle(
             train=train_ds,
             val=val_ds,
             test=None,
-            metadata={
-                "pipeline": "SamaraWithinSubjectAverage",
-                "path": str(resolved),
-                "channel_idx": self.channel_idx,
-                "n_average": self.n_average,
-                "mode": self.mode,
-                "epoch_len": self.epoch_len,
-                "val_fraction": self.val_fraction,
-                "seed": self.seed,
-                "subjects": subjects,
-                "n_train": len(train_ds),
-                "n_val": len(val_ds),
-            },
+            metadata=metadata,
         )
