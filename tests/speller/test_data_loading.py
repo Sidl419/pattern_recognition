@@ -2,10 +2,11 @@
 
 from pathlib import Path
 
-import numpy as np
 import pytest
-
-from pattern_recognition.speller.benchmark import OracleFlashScorer, run_speller_benchmark
+from pattern_recognition.speller.benchmark import (
+    OracleFlashScorer,
+    run_speller_benchmark,
+)
 from pattern_recognition.speller.data_loading import (
     build_bci3_selections_from_mat,
     build_samara_selections_from_dir,
@@ -20,7 +21,9 @@ if not SAMARA_DIR.is_dir():
     SAMARA_DIR = ROOT / "raw_data"
 
 
-@pytest.mark.skipif(not BCI3_TEST.is_file() or not BCI3_ELOC.is_file(), reason="BCI3 mats missing")
+@pytest.mark.skipif(
+    not BCI3_TEST.is_file() or not BCI3_ELOC.is_file(), reason="BCI3 mats missing"
+)
 def test_bci3_real_selections_have_stimulus_codes():
     sels = build_bci3_selections_from_mat(
         BCI3_TEST,
@@ -41,8 +44,7 @@ def test_bci3_real_selections_have_stimulus_codes():
 
 
 @pytest.mark.skipif(
-    not SAMARA_DIR.is_dir()
-    or not any(SAMARA_DIR.glob("S*-P300_classic.mat")),
+    not SAMARA_DIR.is_dir() or not any(SAMARA_DIR.glob("S*-P300_classic.mat")),
     reason="Samara mats missing",
 )
 def test_samara_real_pool_simulation():
@@ -63,7 +65,9 @@ def test_samara_real_pool_simulation():
     assert sel.target_char in SAMARA_GRID.chars
 
 
-@pytest.mark.skipif(not BCI3_TEST.is_file() or not BCI3_ELOC.is_file(), reason="BCI3 mats missing")
+@pytest.mark.skipif(
+    not BCI3_TEST.is_file() or not BCI3_ELOC.is_file(), reason="BCI3 mats missing"
+)
 def test_benchmark_bci3_real_with_oracle(tmp_path):
     run_dir = tmp_path / "bci3_run"
     run_dir.mkdir()
@@ -100,6 +104,7 @@ def test_benchmark_bci3_real_with_oracle(tmp_path):
     assert meta["use_synthetic"] is False
     assert meta["label_source"] == "ground_truth"
 
+
 def test_real_path_required_when_not_synthetic(tmp_path):
     run_dir = tmp_path / "empty_run"
     run_dir.mkdir()
@@ -117,4 +122,6 @@ def test_real_path_required_when_not_synthetic(tmp_path):
         "plots": False,
     }
     with pytest.raises(FileNotFoundError, match="test_mat"):
-        run_speller_benchmark(config, scores_provider=OracleFlashScorer(BCI3_GRID, mode="rowcol"))
+        run_speller_benchmark(
+            config, scores_provider=OracleFlashScorer(BCI3_GRID, mode="rowcol")
+        )

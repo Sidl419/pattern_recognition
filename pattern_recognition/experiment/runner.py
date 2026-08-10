@@ -90,9 +90,7 @@ def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
         "train": DataLoader(
             bundle.train, batch_size=cfg.train.batch_size, shuffle=True
         ),
-        "val": DataLoader(
-            bundle.val, batch_size=cfg.train.batch_size, shuffle=False
-        ),
+        "val": DataLoader(bundle.val, batch_size=cfg.train.batch_size, shuffle=False),
     }
 
     model = get_model(cfg.model.name)(**cfg.model.params)
@@ -118,9 +116,7 @@ def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
     run_dir = Path(cfg.output_dir) / f"{cfg.name}_{timestamp}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    (run_dir / "config.json").write_text(
-        cfg.model_dump_json(indent=2) + "\n"
-    )
+    (run_dir / "config.json").write_text(cfg.model_dump_json(indent=2) + "\n")
 
     if bundle.metadata.get("split_indices") is not None:
         (run_dir / "split_indices.json").write_text(
@@ -136,9 +132,7 @@ def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
         "device_resolved": device_resolved,
         "name": cfg.name,
     }
-    (run_dir / "run_meta.json").write_text(
-        json.dumps(run_meta, indent=2) + "\n"
-    )
+    (run_dir / "run_meta.json").write_text(json.dumps(run_meta, indent=2) + "\n")
 
     metrics = {
         "accuracy": _final_metric(acc_dict["Accuracy"]),
@@ -149,9 +143,7 @@ def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
         "device_requested": device_requested,
         "device_resolved": device_resolved,
     }
-    (run_dir / "metrics.json").write_text(
-        json.dumps(metrics, indent=2) + "\n"
-    )
+    (run_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
 
     history_arrays: dict[str, np.ndarray] = {
         "val_loss": np.asarray(val_loss_history, dtype=float),

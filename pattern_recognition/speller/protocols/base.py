@@ -30,9 +30,7 @@ def get_protocol(name: str) -> SpellerProtocol:
         return _PROTOCOLS[name]
     except KeyError as exc:
         available = ", ".join(sorted(_PROTOCOLS)) or "(none)"
-        raise KeyError(
-            f"Unknown protocol {name!r}. Available: {available}"
-        ) from exc
+        raise KeyError(f"Unknown protocol {name!r}. Available: {available}") from exc
 
 
 @runtime_checkable

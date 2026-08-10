@@ -6,7 +6,6 @@ import json
 
 import matplotlib.pyplot as plt
 import pytest
-
 from pattern_recognition.reporting import (
     compare_speller_runs,
     load_speller_tag,
@@ -17,8 +16,12 @@ from pattern_recognition.reporting import (
     resolve_speller_tag_dir,
     save_speller_plots,
 )
-from pattern_recognition.speller.benchmark import OracleFlashScorer, run_speller_benchmark
+from pattern_recognition.speller.benchmark import (
+    OracleFlashScorer,
+    run_speller_benchmark,
+)
 from pattern_recognition.speller.protocols import get_protocol
+
 from tests.speller.helpers import (
     samara_smoke_config,
     stub_binary_run,
@@ -40,8 +43,7 @@ def test_resolve_speller_tag_prefers_exact(tmp_path):
     for path in (exact, collision):
         path.mkdir(parents=True)
         (path / "speller_metrics.json").write_text(
-            json.dumps({"tag": path.name, "n_selections": 1, "repetitions": [1]})
-            + "\n"
+            json.dumps({"tag": path.name, "n_selections": 1, "repetitions": [1]}) + "\n"
         )
     write_speller_artifacts(exact)
     assert resolve_speller_tag_dir(run_dir, "demo") == exact

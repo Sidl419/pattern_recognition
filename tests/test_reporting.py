@@ -1,7 +1,6 @@
 import json
 
 import numpy as np
-
 from pattern_recognition.experiment import run_experiment
 from pattern_recognition.reporting import (
     compare_runs,

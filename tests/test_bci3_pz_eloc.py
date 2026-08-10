@@ -1,5 +1,4 @@
 import pytest
-
 from pattern_recognition.data.pipelines.bci3_pz import BCI3PzEpochAverage
 
 

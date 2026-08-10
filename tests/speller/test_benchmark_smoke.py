@@ -6,9 +6,12 @@ import csv
 import json
 
 import pytest
-
-from pattern_recognition.speller.benchmark import OracleFlashScorer, run_speller_benchmark
+from pattern_recognition.speller.benchmark import (
+    OracleFlashScorer,
+    run_speller_benchmark,
+)
 from pattern_recognition.speller.protocols import get_protocol
+
 from tests.speller.helpers import samara_smoke_config, stub_binary_run
 
 

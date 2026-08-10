@@ -7,13 +7,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-
 from pattern_recognition.data.splits import three_way_epoch_split
 from pattern_recognition.experiment.schema import ExperimentConfig, SplitConfig
 from pattern_recognition.speller.benchmark import run_speller_benchmark
 from pattern_recognition.speller.schema import SplitConfig as SpellerSplitConfig
 from pattern_recognition.speller.simulate import stratified_epoch_holdout
-
 
 VALID_EXPERIMENT = {
     "name": "smoke",
@@ -94,9 +92,7 @@ def test_three_way_matches_stratified_holdout_eval():
     _, _, eval_idx = three_way_epoch_split(
         y, epoch_holdout=0.3, val_fraction=0.2, seed=7, stratify=True
     )
-    train_idx, expected_eval = stratified_epoch_holdout(
-        y, 0.3, seed=7, stratify=True
-    )
+    train_idx, expected_eval = stratified_epoch_holdout(y, 0.3, seed=7, stratify=True)
     assert set(eval_idx.tolist()) == set(expected_eval.tolist())
     assert set(train_idx).isdisjoint(expected_eval)
     assert abs(y[expected_eval].mean() - y.mean()) < 0.15
@@ -114,9 +110,7 @@ def test_shared_split_train_eval_indices_disjoint():
         seed=seed,
         stratify=True,
     )
-    _, speller_eval = stratified_epoch_holdout(
-        y, 0.3, seed=seed, stratify=True
-    )
+    _, speller_eval = stratified_epoch_holdout(y, 0.3, seed=seed, stratify=True)
     assert set(eval_idx.tolist()) == set(speller_eval.tolist())
     train_pool = set(train_idx.tolist()) | set(val_idx.tolist())
     assert train_pool.isdisjoint(set(speller_eval.tolist()))

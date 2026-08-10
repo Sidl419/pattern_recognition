@@ -124,16 +124,12 @@ def write_speller_artifacts(
         {"subject": "S2", "r": 5, "char_acc": 1.0, "itr": 22.0},
     ]
     with (speller_dir / "per_subject.csv").open("w", newline="") as fh:
-        writer = csv.DictWriter(
-            fh, fieldnames=["subject", "r", "char_acc", "itr"]
-        )
+        writer = csv.DictWriter(fh, fieldnames=["subject", "r", "char_acc", "itr"])
         writer.writeheader()
         writer.writerows(per_subject_rows)
     if early_stop:
         with (speller_dir / "early_stop_repeats.csv").open("w", newline="") as fh:
-            writer = csv.DictWriter(
-                fh, fieldnames=["selection_id", "repeats_used"]
-            )
+            writer = csv.DictWriter(fh, fieldnames=["selection_id", "repeats_used"])
             writer.writeheader()
             for i, r in enumerate(metrics["early_stop"]["repeats_used"]):
                 writer.writerow({"selection_id": i, "repeats_used": r})

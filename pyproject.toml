@@ -34,6 +34,7 @@ pydantic = "^2.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
+ruff = "^0.16.2"
 
 
 [build-system]
@@ -47,3 +48,22 @@ filterwarnings = [
     "ignore:Deprecated call to `pkg_resources.declare_namespace:DeprecationWarning",
     "ignore:np.find_common_type is deprecated:DeprecationWarning",
 ]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+src = ["pattern_recognition", "tests"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
+[tool.ruff.lint]
+# Start light: style hygiene without forcing a large first-pass rewrite.
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# Historical file defines two EEGNet variants; renaming is out of scope for tooling setup.
+"pattern_recognition/models/cnn.py" = ["F811"]
+

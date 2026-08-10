@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from pattern_recognition.speller.benchmark import (
     OracleFlashScorer,
     _per_subject_rows,
@@ -11,6 +10,7 @@ from pattern_recognition.speller.benchmark import (
 )
 from pattern_recognition.speller.metrics import _itr_bits_per_min, selection_duration_s
 from pattern_recognition.speller.protocols import get_protocol
+
 from tests.speller.helpers import stub_binary_run
 
 
@@ -32,12 +32,8 @@ def test_per_subject_itr_uses_subject_char_acc():
     assert by_subj["S1"]["char_acc"] == pytest.approx(0.5)
     assert by_subj["S2"]["char_acc"] == pytest.approx(1.0)
     duration = selection_duration_s(16, 0.125)
-    assert by_subj["S1"]["itr"] == pytest.approx(
-        _itr_bits_per_min(0.5, 16, duration)
-    )
-    assert by_subj["S2"]["itr"] == pytest.approx(
-        _itr_bits_per_min(1.0, 16, duration)
-    )
+    assert by_subj["S1"]["itr"] == pytest.approx(_itr_bits_per_min(0.5, 16, duration))
+    assert by_subj["S2"]["itr"] == pytest.approx(_itr_bits_per_min(1.0, 16, duration))
     assert by_subj["S1"]["itr"] != by_subj["S2"]["itr"]
 
 

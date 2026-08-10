@@ -1,8 +1,7 @@
 import numpy as np
-from tqdm import tqdm
-
 import torch
 from torch.utils.data import Dataset
+from tqdm import tqdm
 
 from pattern_recognition.data.p300 import P300Getter
 
@@ -14,8 +13,23 @@ except ImportError:  # pragma: no cover - optional for CNN / CI paths
 
 
 class GraphMatrixDataset(InMemoryDataset):
-    def __init__(self, root, train_raw, graph, data_path, eloc, test_chars=None, filter=True,
-                    n_channels=64, sfreq=120, sample_size=72, pos_rate=None, label='model', transform=None, pre_transform=None):
+    def __init__(
+        self,
+        root,
+        train_raw,
+        graph,
+        data_path,
+        eloc,
+        test_chars=None,
+        filter=True,
+        n_channels=64,
+        sfreq=120,
+        sample_size=72,
+        pos_rate=None,
+        label="model",
+        transform=None,
+        pre_transform=None,
+    ):
         if Data is None:
             raise ImportError(
                 "torch_geometric is required for GraphMatrixDataset. "
@@ -29,7 +43,9 @@ class GraphMatrixDataset(InMemoryDataset):
         self.filter = filter
         self.pos_rate = pos_rate
 
-        self.p300_dataset = P300Getter(train_raw, eloc, n_channels, sfreq, sample_size, target_chars=test_chars)
+        self.p300_dataset = P300Getter(
+            train_raw, eloc, n_channels, sfreq, sample_size, target_chars=test_chars
+        )
 
         super(GraphMatrixDataset, self).__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
@@ -49,7 +65,10 @@ class GraphMatrixDataset(InMemoryDataset):
         data_list = []
 
         edge_index = np.where(self.graph.toarray() == 1)
-        edge_index = torch.tensor(np.stack([edge_index[0].flatten(), edge_index[1].flatten()]), dtype=torch.long)
+        edge_index = torch.tensor(
+            np.stack([edge_index[0].flatten(), edge_index[1].flatten()]),
+            dtype=torch.long,
+        )
 
         self.p300_dataset.get_cnn_p300_dataset(filter=self.filter)
 
@@ -64,7 +83,7 @@ class GraphMatrixDataset(InMemoryDataset):
 
             data = Data(x=x, edge_index=edge_index, y=y)
             data_list.append(data)
-        
+
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
 
@@ -86,7 +105,9 @@ class CNNMatrixDataset(Dataset):
         if self.with_target:
             y = self.tensors[1][index]
             if self.num_classes == 2:
-                y = y.reshape(-1, ).unsqueeze(1) == torch.arange(0, self.num_classes)
+                y = y.reshape(
+                    -1,
+                ).unsqueeze(1) == torch.arange(0, self.num_classes)
             y = y.float().squeeze()
             return x, y
         else:
@@ -95,10 +116,12 @@ class CNNMatrixDataset(Dataset):
     def __len__(self):
         return self.tensors[0].size(0)
 
+
 class EEGDataset(Dataset):
     """
     TensorDataset with support of transforms.
     """
+
     def __init__(self, tensors, with_target=True, transform=None, num_classes=2):
         assert all(tensors[0].size(0) == tensor.size(0) for tensor in tensors)
         self.tensors = tensors
@@ -114,7 +137,7 @@ class EEGDataset(Dataset):
 
         if self.with_target:
             y = self.tensors[1][index]
-            #y = (torch.arange(0, self.num_classes) == y).float()
+            # y = (torch.arange(0, self.num_classes) == y).float()
             return x, y.unsqueeze(0).float()
         else:
             return x

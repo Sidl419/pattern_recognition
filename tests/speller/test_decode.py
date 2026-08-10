@@ -17,12 +17,14 @@ def test_single_flash_argmax_cell():
     stimulus_ids = np.array([j, 0, j, 1])
     scores = np.array([1.0, 0.0, 1.0, 0.0])
     repeat_index = np.array([0, 0, 1, 1])
-    assert decode_single_flash(scores, stimulus_ids, repeat_index, r=2, grid=SAMARA_GRID) == "J"
+    assert (
+        decode_single_flash(scores, stimulus_ids, repeat_index, r=2, grid=SAMARA_GRID)
+        == "J"
+    )
 
 
 def test_bci3_codes_match_p300getter_for_a():
     from mne.channels import make_standard_montage
-
     from pattern_recognition.data.p300 import P300Getter
 
     eloc = make_standard_montage("standard_1005")

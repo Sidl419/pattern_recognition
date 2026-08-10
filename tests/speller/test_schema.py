@@ -1,9 +1,8 @@
 """SpellerBenchmarkConfig validation."""
 
 import pytest
-from pydantic import ValidationError
-
 from pattern_recognition.speller.schema import SpellerBenchmarkConfig
+from pydantic import ValidationError
 
 SAMARA_OK = {
     "tag": "samara_sim_within_r10",

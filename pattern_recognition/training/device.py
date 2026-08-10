@@ -25,6 +25,4 @@ def resolve_device(requested: str) -> tuple[str, torch.device]:
                 f"Requested {requested} but only {torch.cuda.device_count()} CUDA device(s)."
             )
         return f"cuda:{idx}", torch.device(f"cuda:{idx}")
-    raise ValueError(
-        f"Unknown device '{requested}'. Expected auto|cpu|cuda|cuda:N."
-    )
+    raise ValueError(f"Unknown device '{requested}'. Expected auto|cpu|cuda|cuda:N.")

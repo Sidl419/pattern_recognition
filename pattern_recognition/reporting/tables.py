@@ -32,9 +32,7 @@ def _row_from_run(run_dir: str | Path) -> dict[str, Any]:
 
     row: dict[str, Any] = {
         "name": config.get("name", meta.get("name")),
-        "device_resolved": metrics.get(
-            "device_resolved", meta.get("device_resolved")
-        ),
+        "device_resolved": metrics.get("device_resolved", meta.get("device_resolved")),
         "model.name": model.get("name"),
         "data.pipeline": data.get("pipeline"),
     }

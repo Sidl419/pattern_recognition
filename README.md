@@ -174,7 +174,10 @@ tests/                 # pytest (schema, registries, unit, smoke)
 ## Tests
 
 ```bash
-poetry run pytest tests/ -v
+make test
+# or: poetry run pytest tests/ -v
+make format        # Ruff format
+make check         # format-check + lint + tests
 ```
 
 GitHub Actions runs the same suite on push/PR to `main` (CPU Torch; `torch-geometric` is best-effort so CNN/unit tests still run if PyG wheels fail).

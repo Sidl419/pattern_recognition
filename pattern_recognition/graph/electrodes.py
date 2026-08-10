@@ -1,7 +1,7 @@
-import numpy as np
 import matplotlib.pyplot as plt
-from scipy.spatial import Delaunay
 import networkx as nx
+import numpy as np
+from scipy.spatial import Delaunay
 from sklearn.neighbors import NearestNeighbors
 
 
@@ -10,21 +10,21 @@ def plot_graph(G):
     pos = []
 
     for i, node in enumerate(G.nodes):
-        labels[i] = G.nodes[i]['label']
-        pos.append(G.nodes[i]['pos'])
+        labels[i] = G.nodes[i]["label"]
+        pos.append(G.nodes[i]["pos"])
 
     pos = np.array(pos)
 
-    nx.draw(G, labels=labels, font_weight='bold', pos=pos[:,:2])
+    nx.draw(G, labels=labels, font_weight="bold", pos=pos[:, :2])
     plt.show()
-    nx.draw(G, labels=labels, font_weight='bold', pos=pos[:,1:])
+    nx.draw(G, labels=labels, font_weight="bold", pos=pos[:, 1:])
     plt.show()
-    nx.draw(G, labels=labels, font_weight='bold', pos=pos[:,[0, 2]])
+    nx.draw(G, labels=labels, font_weight="bold", pos=pos[:, [0, 2]])
     plt.show()
 
 
 def get_delaunay_graph(eloc, picture=False):
-    positions = eloc.get_positions()['ch_pos']
+    positions = eloc.get_positions()["ch_pos"]
     points = np.stack(list(positions.values()))
     ch_names = np.stack(list(positions.keys()))
 
@@ -37,12 +37,12 @@ def get_delaunay_graph(eloc, picture=False):
     for path in tri.simplices[:, 1:]:
         nx.add_cycle(G, path)
 
-    #for node in [23, 26, 34, 35, 28, 36]:
+    # for node in [23, 26, 34, 35, 28, 36]:
     #    G.add_edge(27, node)
 
-    #G.remove_edge(63, 42)
-    #G.remove_edge(63, 43)
-    #G.remove_edge(42, 43)
+    # G.remove_edge(63, 42)
+    # G.remove_edge(63, 43)
+    # G.remove_edge(42, 43)
 
     if picture:
         plot_graph(G)
@@ -51,7 +51,7 @@ def get_delaunay_graph(eloc, picture=False):
 
 
 def get_neighbors_graph(eloc, n_neighbors=9, picture=False):
-    positions = eloc.get_positions()['ch_pos']
+    positions = eloc.get_positions()["ch_pos"]
     points = np.stack(list(positions.values()))
     ch_names = np.stack(list(positions.keys()))
 
@@ -75,13 +75,15 @@ def get_neighbors_graph(eloc, n_neighbors=9, picture=False):
 
 
 def get_pos_init_graph(eloc, delta=0.0025):
-    positions = eloc.get_positions()['ch_pos']
+    positions = eloc.get_positions()["ch_pos"]
     points = np.stack(list(positions.values()))
 
     matrix = np.zeros((len(points), len(points)))
 
     for i, point_i in enumerate(points):
         for j, point_j in enumerate(points):
-            matrix[i,j] = np.clip(delta / np.power(point_i - point_j + 1e-5, 2).sum(), 0.1, 1)
+            matrix[i, j] = np.clip(
+                delta / np.power(point_i - point_j + 1e-5, 2).sum(), 0.1, 1
+            )
 
     return matrix

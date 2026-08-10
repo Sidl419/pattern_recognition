@@ -1,13 +1,17 @@
 import numpy as np
-
 from pattern_recognition.speller.decode import decode_single_flash
 from pattern_recognition.speller.grids import SAMARA_GRID
-from pattern_recognition.speller.metrics import evaluate_selections, selection_duration_s
+from pattern_recognition.speller.metrics import (
+    evaluate_selections,
+    selection_duration_s,
+)
 from pattern_recognition.speller.types import Selection
 from pattern_recognition.training.metrics import compute_itr
 
 
-def _perfect_samara_selection(target_char: str, r_max: int) -> tuple[Selection, np.ndarray]:
+def _perfect_samara_selection(
+    target_char: str, r_max: int
+) -> tuple[Selection, np.ndarray]:
     target_cell = SAMARA_GRID.index_of(target_char)
     n_cells = 16
     stim = np.array([i for i in range(n_cells) for _ in range(r_max)])
@@ -57,7 +61,9 @@ def test_perfect_scores_char_acc_one():
         assert abs(point["itr"] - expected_itr) < 1e-6
 
     assert len(result["predictions"]) == 2
-    assert all(row["true"] == "J" and row["pred"] == "J" for row in result["predictions"])
+    assert all(
+        row["true"] == "J" and row["pred"] == "J" for row in result["predictions"]
+    )
     assert "early_stop" not in result
 
 

@@ -98,9 +98,7 @@ class SamaraWithinSubjectAverage:
         subjects = sorted(data.keys())
         if self.subject is not None:
             if self.subject not in data:
-                raise KeyError(
-                    f"Subject {self.subject!r} not in loaded set {subjects}"
-                )
+                raise KeyError(f"Subject {self.subject!r} not in loaded set {subjects}")
             subjects = [self.subject]
 
         train_X_parts: list[torch.Tensor] = []
@@ -136,11 +134,7 @@ class SamaraWithinSubjectAverage:
                     test_size=self.val_fraction,
                     shuffle=True,
                     random_state=subj_seed,
-                    stratify=(
-                        y
-                        if self.stratify and len(np.unique(y)) > 1
-                        else None
-                    ),
+                    stratify=(y if self.stratify and len(np.unique(y)) > 1 else None),
                 )
 
             X_tr, y_tr_t = build_multichannel_subject_dataset_unique(
@@ -163,12 +157,8 @@ class SamaraWithinSubjectAverage:
         X_val = torch.cat(val_X_parts, dim=0)
         y_val = torch.cat(val_y_parts, dim=0)
 
-        train_ds = CNNMatrixDataset(
-            (X_train, y_train), with_target=True, num_classes=2
-        )
-        val_ds = CNNMatrixDataset(
-            (X_val, y_val), with_target=True, num_classes=2
-        )
+        train_ds = CNNMatrixDataset((X_train, y_train), with_target=True, num_classes=2)
+        val_ds = CNNMatrixDataset((X_val, y_val), with_target=True, num_classes=2)
         metadata: dict = {
             "pipeline": "SamaraWithinSubjectAverage",
             "path": str(resolved),

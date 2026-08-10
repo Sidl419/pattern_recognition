@@ -16,7 +16,6 @@ import pattern_recognition.models  # noqa: F401 — register models
 import pattern_recognition.speller.protocols  # noqa: F401 — register protocols
 from pattern_recognition.experiment.schema import ExperimentConfig
 from pattern_recognition.models import get_model
-from pattern_recognition.training.device import resolve_device
 from pattern_recognition.reporting.plots import save_speller_plots
 from pattern_recognition.speller.grids import COL_CODE, ROW_CODE
 from pattern_recognition.speller.metrics import (
@@ -29,6 +28,7 @@ from pattern_recognition.speller.protocols import get_protocol
 from pattern_recognition.speller.protocols.base import SpellerProtocol
 from pattern_recognition.speller.schema import SpellerBenchmarkConfig
 from pattern_recognition.speller.types import Selection
+from pattern_recognition.training.device import resolve_device
 
 
 @runtime_checkable
@@ -100,9 +100,7 @@ def load_flash_scorer_from_run(
     run_dir = Path(run_dir)
     config_path = run_dir / "config.json"
     if not config_path.is_file():
-        raise FileNotFoundError(
-            f"Binary run config not found: {config_path}"
-        )
+        raise FileNotFoundError(f"Binary run config not found: {config_path}")
 
     checkpoint_path = run_dir / "model.pt"
     if not checkpoint_path.is_file():
@@ -111,9 +109,7 @@ def load_flash_scorer_from_run(
             "train with train.save_model=true or inject scores_provider"
         )
 
-    exp_cfg = ExperimentConfig.model_validate(
-        json.loads(config_path.read_text())
-    )
+    exp_cfg = ExperimentConfig.model_validate(json.loads(config_path.read_text()))
     device_requested = exp_cfg.device
     meta_path = run_dir / "run_meta.json"
     if meta_path.is_file():
@@ -122,9 +118,7 @@ def load_flash_scorer_from_run(
 
     _, device = resolve_device(device_requested)
     model = get_model(exp_cfg.model.name)(**exp_cfg.model.params)
-    state = torch.load(
-        checkpoint_path, map_location=device, weights_only=True
-    )
+    state = torch.load(checkpoint_path, map_location=device, weights_only=True)
     model.load_state_dict(state)
     model.to(device)
     return RunFlashScorer(model, device)
@@ -216,17 +210,13 @@ def _validate_binary_split(cfg: SpellerBenchmarkConfig, run_dir: Path) -> None:
         )
 
 
-def _validate_flash_scorer_input(
-    cfg: SpellerBenchmarkConfig, run_dir: Path
-) -> None:
+def _validate_flash_scorer_input(cfg: SpellerBenchmarkConfig, run_dir: Path) -> None:
     """Require single-flash-compatible binary inputs for flash_scorer mode."""
     if cfg.model_mode != "flash_scorer":
         return
     from pattern_recognition.speller.data_loading import merge_protocol_params
 
-    params = merge_protocol_params(
-        _load_binary_config(run_dir), cfg.protocol_params
-    )
+    params = merge_protocol_params(_load_binary_config(run_dir), cfg.protocol_params)
     if params.get("allow_averaged_flash_scorer"):
         return
     n_average = params.get("n_average")
@@ -290,9 +280,7 @@ def _build_real_selections(
         merge_protocol_params,
     )
 
-    params = merge_protocol_params(
-        _load_binary_config(run_dir), cfg.protocol_params
-    )
+    params = merge_protocol_params(_load_binary_config(run_dir), cfg.protocol_params)
     r_max = max(cfg.repetitions)
 
     if cfg.protocol == "samara_single_flash_sim":
@@ -310,13 +298,9 @@ def _build_real_selections(
         if use_train_pool:
             holdout = 0.0
             seed = (
-                cfg.split.seed
-                if cfg.split is not None
-                else int(params.get("seed", 0))
+                cfg.split.seed if cfg.split is not None else int(params.get("seed", 0))
             )
-            stratify = (
-                cfg.split.stratify if cfg.split is not None else True
-            )
+            stratify = cfg.split.stratify if cfg.split is not None else True
         else:
             assert cfg.split is not None
             holdout = cfg.split.epoch_holdout
@@ -336,9 +320,7 @@ def _build_real_selections(
             stratify=stratify,
             channel_idx=int(params.get("channel_idx", 1)),
             epoch_len=int(params.get("epoch_len", 250)),
-            file_pattern=str(
-                params.get("file_pattern", "S*-P300_classic.mat")
-            ),
+            file_pattern=str(params.get("file_pattern", "S*-P300_classic.mat")),
             subjects=subjects,
             simulation_seed=_simulation_seed(cfg),
             use_train_pool=use_train_pool,
@@ -440,8 +422,7 @@ def _per_subject_rows(
             subset = [
                 row
                 for row in predictions
-                if row["r"] == r
-                and (subject is None or row.get("subject") == subject)
+                if row["r"] == r and (subject is None or row.get("subject") == subject)
             ]
             if not subset:
                 char_acc = 0.0
@@ -517,9 +498,7 @@ def run_speller_benchmark(
 
     finished_at = datetime.now(timezone.utc)
 
-    (speller_dir / "config.json").write_text(
-        cfg.model_dump_json(indent=2) + "\n"
-    )
+    (speller_dir / "config.json").write_text(cfg.model_dump_json(indent=2) + "\n")
 
     meta = {
         "tag": cfg.tag,

@@ -1,9 +1,9 @@
+import pytest
 from pattern_recognition.data.pipelines.registry import (
     get_pipeline,
     list_pipelines,
 )
 from pattern_recognition.models.registry import get_model, list_models
-import pytest
 
 
 def test_expected_pipelines_and_models_registered():

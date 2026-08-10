@@ -21,10 +21,11 @@ before the next stimulus (ISI-dependent).
 
 Example (numpy)
 ---------------
->>> data, labels = load_p300_subjects('Samara_data/')
->>> X, y = build_timeshifted_dataset(data['S1901'], labels['S1901'],
-...                                  shift_ms=100, n_channels=3)
->>> X.shape   # (6759, 3, 250)  — each channel is full 250 data points
+>>> data, labels = load_p300_subjects("Samara_data/")
+>>> X, y = build_timeshifted_dataset(
+...     data["S1901"], labels["S1901"], shift_ms=100, n_channels=3
+... )
+>>> X.shape  # (6759, 3, 250)  — each channel is full 250 data points
 
 Example (torch, inside notebook)
 ---------------------------------
@@ -42,6 +43,7 @@ import scipy.io as sio
 
 try:
     import torch
+
     _HAS_TORCH = True
 except ImportError:
     _HAS_TORCH = False
@@ -57,6 +59,7 @@ def _to_numpy(x) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # Loading
 # ---------------------------------------------------------------------------
+
 
 def load_p300_subjects(
     raw_data_path: str,
@@ -93,7 +96,7 @@ def load_p300_subjects(
     for fpath in sorted(glob.glob(pattern)):
         mat = sio.loadmat(fpath)
         subj = str(mat["subj"][0])
-        epochs = mat["epochs"]                             # (N, 3, 500)
+        epochs = mat["epochs"]  # (N, 3, 500)
         y = mat["labels"].ravel().astype(np.int64)
 
         x = epochs[:, channel_idx, :].astype(np.float32)  # (N, 500)
@@ -112,6 +115,7 @@ def load_p300_subjects(
 # ---------------------------------------------------------------------------
 # Time-shifted multi-channel builder
 # ---------------------------------------------------------------------------
+
 
 def build_timeshifted_dataset(
     data: Union[np.ndarray, "torch.Tensor"],
@@ -163,11 +167,11 @@ def build_timeshifted_dataset(
         )
 
     # Build index array: (n_channels, epoch_len)
-    offsets = np.arange(n_channels) * shift_samples       # (n_channels,)
-    base = np.arange(epoch_len)                            # (epoch_len,)
-    indices = offsets[:, None] + base[None, :]             # (n_channels, epoch_len)
+    offsets = np.arange(n_channels) * shift_samples  # (n_channels,)
+    base = np.arange(epoch_len)  # (epoch_len,)
+    indices = offsets[:, None] + base[None, :]  # (n_channels, epoch_len)
 
-    X = data_np[:, indices]                                # (n_trials, n_channels, epoch_len)
+    X = data_np[:, indices]  # (n_trials, n_channels, epoch_len)
     return X, labels_np
 
 
@@ -180,7 +184,9 @@ def build_timeshifted_dataset_sc(
     fs: float = 250.0,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Like :func:`build_timeshifted_dataset` but averages channels → (n, 1, epoch_len)."""
-    X_mc, y = build_timeshifted_dataset(data, labels, shift_ms, n_channels, epoch_len, fs)
+    X_mc, y = build_timeshifted_dataset(
+        data, labels, shift_ms, n_channels, epoch_len, fs
+    )
     X_sc = X_mc.mean(axis=1, keepdims=True)
     return X_sc, y
 
@@ -188,6 +194,7 @@ def build_timeshifted_dataset_sc(
 # ---------------------------------------------------------------------------
 # Torch helper
 # ---------------------------------------------------------------------------
+
 
 def to_torch(X: np.ndarray, y: np.ndarray):
     """Convert numpy arrays to torch tensors (float32 / int64)."""
@@ -199,6 +206,7 @@ def to_torch(X: np.ndarray, y: np.ndarray):
 # ---------------------------------------------------------------------------
 # Info / diagnostics
 # ---------------------------------------------------------------------------
+
 
 def time_shift_info(
     raw_epoch_len: int = 500,

@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-
 from pattern_recognition.speller.grids import (
     BCI3_GRID,
     COL_CODE,

@@ -25,9 +25,7 @@ def get_model(name: str) -> Callable[..., Any]:
         return _MODELS[name]
     except KeyError as exc:
         available = ", ".join(sorted(_MODELS)) or "(none)"
-        raise KeyError(
-            f"Unknown model {name!r}. Available: {available}"
-        ) from exc
+        raise KeyError(f"Unknown model {name!r}. Available: {available}") from exc
 
 
 def list_models() -> list[str]:

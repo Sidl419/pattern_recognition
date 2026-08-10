@@ -25,9 +25,7 @@ def get_pipeline(name: str) -> type:
         return _PIPELINES[name]
     except KeyError as exc:
         available = ", ".join(sorted(_PIPELINES)) or "(none)"
-        raise KeyError(
-            f"Unknown pipeline {name!r}. Available: {available}"
-        ) from exc
+        raise KeyError(f"Unknown pipeline {name!r}. Available: {available}") from exc
 
 
 def list_pipelines() -> list[str]:

@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
 import pytest
-
 from pattern_recognition.data.bci3_prep import prepare_bci3_pz_flashes
 from pattern_recognition.data.pipelines.bci3_pz import BCI3PzEpochAverage
 

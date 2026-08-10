@@ -36,7 +36,9 @@ Installable package: `pattern_recognition` (Poetry). Design: `docs/superpowers/s
 
 ```bash
 poetry install
-poetry run pytest tests/ -q
+make test          # or: poetry run pytest tests/ -q
+make format        # Ruff format pattern_recognition + tests
+make check         # format-check + lint + test
 poetry run python -m pattern_recognition.experiment run configs/synthetic_smoke.json
 ```
 

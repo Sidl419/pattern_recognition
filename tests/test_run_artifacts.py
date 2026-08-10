@@ -1,10 +1,25 @@
-from pathlib import Path
 import json
-from pattern_recognition.experiment import run_experiment
-from pattern_recognition.data.pipelines.registry import get_pipeline
 
-REQUIRED_METRICS = {"accuracy", "balanced_accuracy", "f1", "itr", "train_time_sec", "device_requested", "device_resolved"}
-REQUIRED_META = {"seed", "started_at", "finished_at", "device_requested", "device_resolved", "name"}
+from pattern_recognition.data.pipelines.registry import get_pipeline
+from pattern_recognition.experiment import run_experiment
+
+REQUIRED_METRICS = {
+    "accuracy",
+    "balanced_accuracy",
+    "f1",
+    "itr",
+    "train_time_sec",
+    "device_requested",
+    "device_resolved",
+}
+REQUIRED_META = {
+    "seed",
+    "started_at",
+    "finished_at",
+    "device_requested",
+    "device_resolved",
+    "name",
+}
 
 
 def test_run_experiment_writes_contract(tmp_path):
@@ -12,9 +27,20 @@ def test_run_experiment_writes_contract(tmp_path):
         "name": "smoke",
         "seed": 0,
         "device": "cpu",
-        "data": {"pipeline": "SyntheticBinary", "params": {"n_train": 32, "n_val": 16, "n_channels": 1, "n_times": 64}},
+        "data": {
+            "pipeline": "SyntheticBinary",
+            "params": {"n_train": 32, "n_val": 16, "n_channels": 1, "n_times": 64},
+        },
         "model": {"name": "BaseCNN", "params": {"input_feat_dim": 64, "n_channels": 1}},
-        "train": {"lr": 1e-3, "weight_decay": 0.0, "batch_size": 8, "num_epochs": 1, "step_size": 1, "gamma": 1.0, "save_model": True},
+        "train": {
+            "lr": 1e-3,
+            "weight_decay": 0.0,
+            "batch_size": 8,
+            "num_epochs": 1,
+            "step_size": 1,
+            "gamma": 1.0,
+            "save_model": True,
+        },
         "output_dir": str(tmp_path),
     }
     run_dir = run_experiment(cfg)

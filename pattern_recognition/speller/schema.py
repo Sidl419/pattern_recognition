@@ -115,8 +115,7 @@ class SpellerBenchmarkConfig(BaseModel):
             )
         if self.subject_mode == "cross_subject" and not has_test_subjects:
             raise ValueError(
-                "test_subjects must be non-empty when subject_mode is "
-                "cross_subject"
+                "test_subjects must be non-empty when subject_mode is cross_subject"
             )
 
     def _validate_bci3(self) -> None:
@@ -128,13 +127,11 @@ class SpellerBenchmarkConfig(BaseModel):
             return
         if 0 < self.split.epoch_holdout <= 1:
             raise ValueError(
-                "epoch_holdout is forbidden for protocol bci3_rowcol when split "
-                "is set"
+                "epoch_holdout is forbidden for protocol bci3_rowcol when split is set"
             )
         if self.split.stratify:
             raise ValueError(
-                "stratify is forbidden for protocol bci3_rowcol when split is "
-                "set"
+                "stratify is forbidden for protocol bci3_rowcol when split is set"
             )
 
     def _validate_samara(self) -> None:

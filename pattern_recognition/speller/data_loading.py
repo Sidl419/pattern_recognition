@@ -155,9 +155,7 @@ def build_samara_selections_from_dir(
         file_pattern=file_pattern,
     )
     if not data:
-        raise FileNotFoundError(
-            f"No files matching {file_pattern!r} under {data_path}"
-        )
+        raise FileNotFoundError(f"No files matching {file_pattern!r} under {data_path}")
 
     subject_ids = sorted(data.keys())
     if subjects is not None:

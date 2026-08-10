@@ -69,6 +69,4 @@ class ExperimentConfig(BaseModel):
                     f"Unknown device '{value}'. Expected auto|cpu|cuda|cuda:N."
                 )
             return f"cuda:{int(suffix)}"
-        raise ValueError(
-            f"Unknown device '{value}'. Expected auto|cpu|cuda|cuda:N."
-        )
+        raise ValueError(f"Unknown device '{value}'. Expected auto|cpu|cuda|cuda:N.")

@@ -1,7 +1,6 @@
 """Samara selection packing / simulation helpers."""
 
 import numpy as np
-
 from pattern_recognition.speller.simulate import (
     simulate_samara_selections,
     stratified_epoch_holdout,

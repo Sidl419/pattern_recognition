@@ -73,9 +73,7 @@ def build_multichannel_subject_dataset_unique(
         M = len(X_cls)
         usable = (M // n_channels) * n_channels
         if usable == 0:
-            raise ValueError(
-                f"Not enough samples for class {cls}: {M} < {n_channels}"
-            )
+            raise ValueError(f"Not enough samples for class {cls}: {M} < {n_channels}")
 
         if generator is not None:
             perm = torch.randperm(M, generator=generator)
@@ -85,9 +83,7 @@ def build_multichannel_subject_dataset_unique(
 
         chunks = X_cls.view(usable // n_channels, n_channels, *X_cls.shape[1:])
         X_out.append(chunks)
-        y_out.append(
-            torch.full((usable // n_channels,), cls, dtype=torch.long)
-        )
+        y_out.append(torch.full((usable // n_channels,), cls, dtype=torch.long))
 
     return torch.cat(X_out, dim=0), torch.cat(y_out, dim=0)
 
