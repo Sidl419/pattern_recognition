@@ -25,6 +25,7 @@ from pattern_recognition.training.sequence_loop import (
 )
 
 SEQUENCE_MODELS = frozenset({"ContextualTransformer", "SequenceClassifier"})
+BINARY_PACKET_FORBIDDEN = frozenset({"EEGNet", "BaseCNN"})
 
 
 def _is_packet_pipeline(name: str) -> bool:
@@ -98,6 +99,15 @@ def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
             f"Sequence model {cfg.model.name!r} requires a selection-packet "
             f"pipeline (name ending in 'SelectionPackets'); got "
             f"{cfg.data.pipeline!r}"
+        )
+    if (
+        cfg.model.name in BINARY_PACKET_FORBIDDEN
+        and _is_packet_pipeline(cfg.data.pipeline)
+    ):
+        raise ValueError(
+            f"Binary model {cfg.model.name!r} cannot use selection-packet "
+            f"pipeline {cfg.data.pipeline!r} (name ending in 'SelectionPackets'); "
+            "use a binary epoch pipeline instead"
         )
 
     pipeline_cls = get_pipeline(cfg.data.pipeline)

@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from pattern_recognition.experiment import run_experiment
 from pattern_recognition.speller.benchmark import (
     ContextualFlashScorer,
@@ -66,6 +67,16 @@ def _two_repeat_selection(rng: np.random.Generator) -> Selection:
         repeat_index=repeat_index,
         meta={},
     )
+
+
+def test_contextual_flash_scorer_rejects_protocol_mismatch(tmp_path):
+    run_dir = _ct_run(tmp_path)
+    with pytest.raises(ValueError, match="protocol"):
+        load_flash_scorer_from_run(
+            run_dir,
+            model_mode="flash_scorer",
+            protocol="samara_single_flash_sim",
+        )
 
 
 def test_load_contextual_flash_scorer_from_run(tmp_path):

@@ -182,3 +182,39 @@ def test_binary_checkpoint_rejects_selection_classifier_mode(tmp_path):
     run_dir = _binary_run(tmp_path)
     with pytest.raises(ValueError, match="SequenceClassifier"):
         load_selection_classifier_from_run(run_dir)
+
+
+def test_selection_classifier_rejects_early_stop(tmp_path):
+    from pattern_recognition.speller.benchmark import run_speller_benchmark
+
+    run_dir = _sc_run(tmp_path)
+    with pytest.raises(ValueError, match="early_stop"):
+        run_speller_benchmark(
+            {
+                "tag": "sc_early",
+                "model_mode": "selection_classifier",
+                "protocol": "bci3_rowcol",
+                "repetitions": [1],
+                "run_dir": str(run_dir),
+                "use_synthetic": True,
+                "plots": False,
+                "online": {"early_stop": True, "margin_tau": 1.0},
+                "protocol_params": {
+                    "phrase": "A",
+                    "r_max": 1,
+                    "flash_shape": [1, 64],
+                },
+            }
+        )
+
+
+def test_selection_classifier_rejects_protocol_mismatch(tmp_path):
+    from pattern_recognition.speller.benchmark import (
+        load_selection_classifier_from_run,
+    )
+
+    run_dir = _sc_run(tmp_path)
+    with pytest.raises(ValueError, match="protocol"):
+        load_selection_classifier_from_run(
+            run_dir, protocol="samara_single_flash_sim"
+        )

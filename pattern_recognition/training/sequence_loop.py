@@ -56,6 +56,15 @@ def _binary_flash_metrics(
     return acc, bal_acc, f1, compute_itr(acc, n_classes=2)
 
 
+def selection_classifier_n_classes(model: SequenceClassifier) -> int:
+    """ITR class count from SC head geometry (row×col joint, or cell ``n_cells``)."""
+    if model.head_mode == "rowcol":
+        return int(
+            model.row_classifier.out_features * model.column_classifier.out_features
+        )
+    return int(model.character_classifier.out_features)
+
+
 def train_contextual_transformer(
     model: ContextualTransformer,
     dataloaders: dict[str, Any],
@@ -183,7 +192,7 @@ def train_sequence_classifier(
 
     val_loss_history: list[float] = []
     val_acc_history: list[float] = []
-    n_classes = 36 if model.head_mode == "rowcol" else 16
+    n_classes = selection_classifier_n_classes(model)
 
     for _epoch in range(learning_params["num_epochs"]):
         for phase in ("train", "val"):

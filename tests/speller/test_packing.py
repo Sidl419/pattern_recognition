@@ -37,6 +37,44 @@ def test_flash_targets_bci3():
     np.testing.assert_array_equal(t, np.array([1, 1, 0]))
 
 
+def test_flash_targets_samara():
+    from pattern_recognition.speller.grids import SAMARA_GRID
+
+    char = SAMARA_GRID.chars[3]
+    ids = np.array([3, 0, 3, 7], dtype=np.int64)
+    sel = Selection(
+        flashes=np.zeros((4, 1, 8)),
+        stimulus_ids=ids,
+        target_char=char,
+        repeat_index=np.array([0, 0, 1, 1], dtype=np.int64),
+        meta={},
+    )
+    t = flash_targets_for_selection(sel, "samara_single_flash_sim")
+    np.testing.assert_array_equal(t, np.array([1, 0, 1, 0]))
+
+
+def test_pack_selection_filters_by_r_samara():
+    from pattern_recognition.speller.grids import SAMARA_GRID
+
+    char = SAMARA_GRID.chars[1]
+    n = 32  # 16 cells × 2 repeats
+    sel = Selection(
+        flashes=np.random.randn(n, 1, 8).astype(np.float32),
+        stimulus_ids=np.tile(np.arange(16, dtype=np.int64), 2),
+        target_char=char,
+        repeat_index=np.concatenate(
+            [np.zeros(16, dtype=np.int64), np.ones(16, dtype=np.int64)]
+        ),
+        meta={},
+    )
+    packed = pack_selection(sel, protocol="samara_single_flash_sim", r=1)
+    assert packed["epochs"].shape[0] == 16
+    assert packed["repetitions"].max() == 0
+    assert packed["stimulus_codes"].min() == 1
+    assert packed["flash_targets"].shape == (16,)
+    assert int(packed["flash_targets"].sum()) == 1
+
+
 def test_pack_and_collate_pads():
     sels = []
     for n in (4, 6):

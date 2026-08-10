@@ -194,12 +194,37 @@ def _load_run_checkpoint(
     return exp_cfg, model, device, meta
 
 
+def _assert_train_speller_protocol(
+    train_protocol: str | None,
+    speller_protocol: str | None,
+    *,
+    model_name: str,
+) -> None:
+    """Reject train/speller protocol mismatches for sequence checkpoints."""
+    if speller_protocol is None:
+        return
+    if not train_protocol:
+        raise ValueError(
+            f"{model_name} run config must set data.params.protocol"
+        )
+    if train_protocol != speller_protocol:
+        raise ValueError(
+            f"Speller protocol {speller_protocol!r} does not match train "
+            f"data.params.protocol {train_protocol!r} for {model_name}"
+        )
+
+
 def load_flash_scorer_from_run(
     run_dir: Path,
     *,
     model_mode: str,
+    protocol: str | None = None,
 ) -> FlashScorer:
-    """Load a flash scorer checkpoint from a binary / CT experiment run."""
+    """Load a flash scorer checkpoint from a binary / CT experiment run.
+
+    When ``protocol`` is provided for a ContextualTransformer run, it must match
+    ``exp_cfg.data.params.protocol``.
+    """
     if model_mode == "selection_classifier":
         raise ValueError(
             "model_mode='selection_classifier' requires "
@@ -216,17 +241,27 @@ def load_flash_scorer_from_run(
         )
 
     if exp_cfg.model.name == "ContextualTransformer":
-        protocol = exp_cfg.data.params.get("protocol")
-        if not protocol:
+        train_protocol = exp_cfg.data.params.get("protocol")
+        if not train_protocol:
             raise ValueError(
                 "ContextualTransformer run config must set data.params.protocol"
             )
-        return ContextualFlashScorer(model, device, protocol=protocol)
+        _assert_train_speller_protocol(
+            train_protocol, protocol, model_name="ContextualTransformer"
+        )
+        return ContextualFlashScorer(model, device, protocol=train_protocol)
     return RunFlashScorer(model, device)
 
 
-def load_selection_classifier_from_run(run_dir: Path) -> RunSelectionClassifier:
-    """Load a SequenceClassifier checkpoint for selection_classifier mode."""
+def load_selection_classifier_from_run(
+    run_dir: Path,
+    *,
+    protocol: str | None = None,
+) -> RunSelectionClassifier:
+    """Load a SequenceClassifier checkpoint for selection_classifier mode.
+
+    When ``protocol`` is provided, it must match ``exp_cfg.data.params.protocol``.
+    """
     exp_cfg, model, device, meta = _load_run_checkpoint(run_dir)
     recorded_mode = meta.get("model_mode")
     if exp_cfg.model.name != "SequenceClassifier":
@@ -240,14 +275,17 @@ def load_selection_classifier_from_run(run_dir: Path) -> RunSelectionClassifier:
             "selection_classifier loading"
         )
 
-    protocol = exp_cfg.data.params.get("protocol")
-    if not protocol:
+    train_protocol = exp_cfg.data.params.get("protocol")
+    if not train_protocol:
         raise ValueError(
             "SequenceClassifier run config must set data.params.protocol"
         )
-    speller_protocol = get_protocol(protocol)
+    _assert_train_speller_protocol(
+        train_protocol, protocol, model_name="SequenceClassifier"
+    )
+    speller_protocol = get_protocol(train_protocol)
     return RunSelectionClassifier(
-        model, device, protocol=protocol, grid=speller_protocol.grid
+        model, device, protocol=train_protocol, grid=speller_protocol.grid
     )
 
 
@@ -536,7 +574,9 @@ def _resolve_scorer(
             "selection_classifier mode uses load_selection_classifier_from_run; "
             "do not resolve a flash scorer"
         )
-    return load_flash_scorer_from_run(run_dir, model_mode=cfg.model_mode)
+    return load_flash_scorer_from_run(
+        run_dir, model_mode=cfg.model_mode, protocol=cfg.protocol
+    )
 
 
 def _evaluate_symbol_predictor(
@@ -662,7 +702,14 @@ def run_speller_benchmark(
                 "scores_provider is only valid for flash_scorer mode; "
                 "selection_classifier loads RunSelectionClassifier from run_dir"
             )
-        predictor = load_selection_classifier_from_run(run_dir)
+        if cfg.online.early_stop:
+            raise ValueError(
+                "online.early_stop is not implemented for "
+                "selection_classifier mode"
+            )
+        predictor = load_selection_classifier_from_run(
+            run_dir, protocol=cfg.protocol
+        )
         eval_result = _evaluate_symbol_predictor(
             selections,
             predictor,

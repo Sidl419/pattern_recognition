@@ -44,6 +44,41 @@ def test_sequence_model_rejects_non_packet_pipeline(tmp_path):
         run_experiment(cfg)
 
 
+def test_binary_model_rejects_selection_packet_pipeline(tmp_path):
+    cfg = {
+        "name": "bin_packet_mismatch",
+        "seed": 0,
+        "device": "cpu",
+        "data": {
+            "pipeline": "SyntheticSelectionPackets",
+            "params": {
+                "protocol": "bci3_rowcol",
+                "n_train": 4,
+                "n_val": 2,
+                "n_channels": 1,
+                "n_times": 64,
+                "r_max": 2,
+            },
+        },
+        "model": {
+            "name": "EEGNet",
+            "params": {"input_feat_dim": 64, "in_channels": 1},
+        },
+        "train": {
+            "lr": 1e-3,
+            "weight_decay": 0.0,
+            "batch_size": 2,
+            "num_epochs": 1,
+            "step_size": 1,
+            "gamma": 1.0,
+            "save_model": False,
+        },
+        "output_dir": str(tmp_path),
+    }
+    with pytest.raises(ValueError, match="SelectionPackets"):
+        run_experiment(cfg)
+
+
 def test_contextual_transformer_smoke_run(tmp_path):
     cfg = {
         "name": "ct_smoke",

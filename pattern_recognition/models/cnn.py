@@ -429,6 +429,7 @@ class SequenceClassifier(nn.Module):
         super().__init__()
         self.sequence_encoder = sequence_encoder
         self.head_mode = head_mode
+        self.n_cells = n_cells
         d_model = sequence_encoder.code_embedding.embedding_dim
         self.pool_attention = nn.Linear(d_model, 1)
 
