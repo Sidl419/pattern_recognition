@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import torch
 
 from pattern_recognition.speller.grids import CODE_TO_COL, CODE_TO_ROW, GridSpec
 
@@ -87,3 +88,26 @@ def decode_single_flash(
         scores, stimulus_ids, repeat_index, r, grid
     )
     return grid.chars[int(np.argmax(cell_means))]
+
+
+def decode_from_sequence_output(
+    output: dict[str, torch.Tensor], protocol: str, grid: GridSpec
+) -> str:
+    """Decode a SequenceClassifier output dict to a character."""
+    if protocol == "bci3_rowcol":
+        row_logits = output["row_logits"]
+        col_logits = output["column_logits"]
+        if row_logits.ndim > 1:
+            row_logits = row_logits[0]
+            col_logits = col_logits[0]
+        best_row = int(row_logits.argmax())
+        best_col = int(col_logits.argmax())
+        return grid.char_at(best_row, best_col)
+
+    if protocol == "samara_single_flash_sim":
+        logits = output["character_logits"]
+        if logits.ndim > 1:
+            logits = logits[0]
+        return grid.chars[int(logits.argmax())]
+
+    raise ValueError(f"Unsupported protocol for sequence decode: {protocol!r}")

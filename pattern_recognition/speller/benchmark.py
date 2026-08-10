@@ -17,7 +17,8 @@ import pattern_recognition.speller.protocols  # noqa: F401 — register protocol
 from pattern_recognition.experiment.schema import ExperimentConfig
 from pattern_recognition.models import get_model
 from pattern_recognition.reporting.plots import save_speller_plots
-from pattern_recognition.speller.grids import COL_CODE, ROW_CODE
+from pattern_recognition.speller.decode import decode_from_sequence_output
+from pattern_recognition.speller.grids import COL_CODE, ROW_CODE, GridSpec
 from pattern_recognition.speller.metrics import (
     _itr_bits_per_min,
     evaluate_selections,
@@ -129,20 +130,42 @@ class ContextualFlashScorer:
         return scores
 
 
-def load_flash_scorer_from_run(
-    run_dir: Path,
-    *,
-    model_mode: str,
-) -> FlashScorer:
-    """Load a flash scorer checkpoint from a binary experiment run."""
-    if model_mode == "selection_classifier":
-        raise NotImplementedError(
-            "selection_classifier scoring from run_dir is not implemented in v1; "
-            "inject a scores_provider or train a selection-classifier checkpoint"
-        )
-    if model_mode != "flash_scorer":
-        raise ValueError(f"Unsupported model_mode {model_mode!r}")
+class RunSelectionClassifier:
+    """Predict characters from a SequenceClassifier checkpoint."""
 
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        device: torch.device,
+        protocol: str,
+        grid: GridSpec,
+    ) -> None:
+        self._model = model
+        self._device = device
+        self._protocol = protocol
+        self._grid = grid
+
+    def predict_char(self, selection: Selection, r: int) -> str:
+        packed = pack_selection(selection, protocol=self._protocol, r=r)
+        epochs = packed["epochs"].unsqueeze(0).to(self._device)
+        stimulus_codes = packed["stimulus_codes"].unsqueeze(0).to(self._device)
+        repetitions = packed["repetitions"].unsqueeze(0).to(self._device)
+        valid_mask = packed["valid_mask"].unsqueeze(0).to(self._device)
+
+        self._model.eval()
+        with torch.no_grad():
+            output = self._model(
+                epochs=epochs,
+                stimulus_codes=stimulus_codes,
+                repetitions=repetitions,
+                valid_mask=valid_mask,
+            )
+        return decode_from_sequence_output(output, self._protocol, self._grid)
+
+
+def _load_run_checkpoint(
+    run_dir: Path,
+) -> tuple[ExperimentConfig, torch.nn.Module, torch.device, dict]:
     run_dir = Path(run_dir)
     config_path = run_dir / "config.json"
     if not config_path.is_file():
@@ -157,6 +180,7 @@ def load_flash_scorer_from_run(
 
     exp_cfg = ExperimentConfig.model_validate(json.loads(config_path.read_text()))
     device_requested = exp_cfg.device
+    meta: dict = {}
     meta_path = run_dir / "run_meta.json"
     if meta_path.is_file():
         meta = json.loads(meta_path.read_text())
@@ -167,6 +191,29 @@ def load_flash_scorer_from_run(
     state = torch.load(checkpoint_path, map_location=device, weights_only=True)
     model.load_state_dict(state)
     model.to(device)
+    return exp_cfg, model, device, meta
+
+
+def load_flash_scorer_from_run(
+    run_dir: Path,
+    *,
+    model_mode: str,
+) -> FlashScorer:
+    """Load a flash scorer checkpoint from a binary / CT experiment run."""
+    if model_mode == "selection_classifier":
+        raise ValueError(
+            "model_mode='selection_classifier' requires "
+            "load_selection_classifier_from_run; flash scorer loader rejects it"
+        )
+    if model_mode != "flash_scorer":
+        raise ValueError(f"Unsupported model_mode {model_mode!r}")
+
+    exp_cfg, model, device, _meta = _load_run_checkpoint(run_dir)
+    if exp_cfg.model.name == "SequenceClassifier":
+        raise ValueError(
+            "SequenceClassifier checkpoint requires model_mode="
+            "'selection_classifier' (use load_selection_classifier_from_run)"
+        )
 
     if exp_cfg.model.name == "ContextualTransformer":
         protocol = exp_cfg.data.params.get("protocol")
@@ -176,6 +223,32 @@ def load_flash_scorer_from_run(
             )
         return ContextualFlashScorer(model, device, protocol=protocol)
     return RunFlashScorer(model, device)
+
+
+def load_selection_classifier_from_run(run_dir: Path) -> RunSelectionClassifier:
+    """Load a SequenceClassifier checkpoint for selection_classifier mode."""
+    exp_cfg, model, device, meta = _load_run_checkpoint(run_dir)
+    recorded_mode = meta.get("model_mode")
+    if exp_cfg.model.name != "SequenceClassifier":
+        raise ValueError(
+            f"selection_classifier requires a SequenceClassifier checkpoint "
+            f"(got model.name={exp_cfg.model.name!r})"
+        )
+    if recorded_mode is not None and recorded_mode != "selection_classifier":
+        raise ValueError(
+            f"run_meta.model_mode={recorded_mode!r} is incompatible with "
+            "selection_classifier loading"
+        )
+
+    protocol = exp_cfg.data.params.get("protocol")
+    if not protocol:
+        raise ValueError(
+            "SequenceClassifier run config must set data.params.protocol"
+        )
+    speller_protocol = get_protocol(protocol)
+    return RunSelectionClassifier(
+        model, device, protocol=protocol, grid=speller_protocol.grid
+    )
 
 
 def _load_config(
@@ -295,6 +368,11 @@ def _build_synthetic_selections(
     cfg: SpellerBenchmarkConfig, protocol: SpellerProtocol
 ) -> list[Selection]:
     r_max = max(cfg.repetitions)
+    params = dict(cfg.protocol_params or {})
+    flash_shape = params.get("flash_shape")
+    if flash_shape is not None:
+        flash_shape = tuple(flash_shape)
+
     if cfg.protocol == "samara_single_flash_sim":
         assert cfg.simulation is not None
         n_cells = protocol.grid.n_rows * protocol.grid.n_cols
@@ -310,17 +388,22 @@ def _build_synthetic_selections(
         }
         if cfg.split is not None:
             kwargs["epoch_holdout"] = cfg.split.epoch_holdout
+        if flash_shape is not None:
+            kwargs["flash_shape"] = flash_shape
         return protocol.build_synthetic_selections(**kwargs)
 
     subject = "A"
     if cfg.test_subjects:
         subject = cfg.test_subjects[0]
-    return protocol.build_synthetic_selections(
-        phrase="AB",
-        r_max=r_max,
-        subject=subject,
-        seed=_simulation_seed(cfg),
-    )
+    kwargs: dict = {
+        "phrase": str(params.get("phrase", "AB")),
+        "r_max": r_max,
+        "subject": subject,
+        "seed": _simulation_seed(cfg),
+    }
+    if flash_shape is not None:
+        kwargs["flash_shape"] = flash_shape
+    return protocol.build_synthetic_selections(**kwargs)
 
 
 def _build_real_selections(
@@ -449,11 +532,53 @@ def _resolve_scorer(
     if scores_provider is not None:
         return scores_provider
     if cfg.model_mode == "selection_classifier":
-        raise NotImplementedError(
-            "selection_classifier scoring without an injected provider is not "
-            "implemented in v1"
+        raise ValueError(
+            "selection_classifier mode uses load_selection_classifier_from_run; "
+            "do not resolve a flash scorer"
         )
     return load_flash_scorer_from_run(run_dir, model_mode=cfg.model_mode)
+
+
+def _evaluate_symbol_predictor(
+    selections: list[Selection],
+    predictor: RunSelectionClassifier,
+    repetitions: list[int],
+    *,
+    n_classes: int,
+    soa_s: float,
+    flashes_per_repeat: int,
+) -> dict:
+    """Evaluate a selection-level char predictor without fake flash scores."""
+    predictions: list[dict] = []
+    correct_at_r: dict[int, list[bool]] = {r: [] for r in repetitions}
+
+    for selection_id, selection in enumerate(selections):
+        subject = selection.meta.get("subject")
+        for r in repetitions:
+            pred = predictor.predict_char(selection, r)
+            is_correct = pred == selection.target_char
+            correct_at_r[r].append(is_correct)
+            row = {
+                "selection_id": selection_id,
+                "r": r,
+                "true": selection.target_char,
+                "pred": pred,
+            }
+            if subject is not None:
+                row["subject"] = subject
+            predictions.append(row)
+
+    acc_vs_repeats = []
+    for r in repetitions:
+        char_acc = float(np.mean(correct_at_r[r])) if correct_at_r[r] else 0.0
+        duration_s = selection_duration_s(flashes_per_repeat * r, soa_s)
+        itr = _itr_bits_per_min(char_acc, n_classes, duration_s)
+        acc_vs_repeats.append({"r": r, "char_acc": char_acc, "itr": itr})
+
+    return {
+        "acc_vs_repeats": acc_vs_repeats,
+        "predictions": predictions,
+    }
 
 
 def _per_subject_rows(
@@ -527,43 +652,59 @@ def run_speller_benchmark(
     protocol = get_protocol(cfg.protocol)
     mode = _decode_mode(protocol)
     device_requested, device_resolved = _device_from_run(run_dir)
-    scorer = _resolve_scorer(cfg, run_dir, scores_provider)
 
     started_at = datetime.now(timezone.utc)
     selections = _build_selections(cfg, protocol, run_dir)
 
-    # CT attends across flashes: re-score at each r with pack_selection(..., r=r).
-    # Independent CNNs keep one-shot scoring (subset by r only at decode).
-    if isinstance(scorer, ContextualFlashScorer):
-        eval_result = evaluate_selections(
+    if cfg.model_mode == "selection_classifier":
+        if scores_provider is not None:
+            raise ValueError(
+                "scores_provider is only valid for flash_scorer mode; "
+                "selection_classifier loads RunSelectionClassifier from run_dir"
+            )
+        predictor = load_selection_classifier_from_run(run_dir)
+        eval_result = _evaluate_symbol_predictor(
             selections,
-            None,
-            protocol.decode,
+            predictor,
             cfg.repetitions,
             n_classes=protocol.grid.n_rows * protocol.grid.n_cols,
             soa_s=protocol.soa_s,
             flashes_per_repeat=protocol.flashes_per_repeat,
-            mode=mode,
-            grid=protocol.grid,
-            early_stop=cfg.online.early_stop,
-            margin_tau=cfg.online.margin_tau,
-            score_fn=lambda sel, r: scorer.predict_scores(sel, r=r),
         )
     else:
-        scores_per_sel = [scorer.predict_scores(sel) for sel in selections]
-        eval_result = evaluate_selections(
-            selections,
-            scores_per_sel,
-            protocol.decode,
-            cfg.repetitions,
-            n_classes=protocol.grid.n_rows * protocol.grid.n_cols,
-            soa_s=protocol.soa_s,
-            flashes_per_repeat=protocol.flashes_per_repeat,
-            mode=mode,
-            grid=protocol.grid,
-            early_stop=cfg.online.early_stop,
-            margin_tau=cfg.online.margin_tau,
-        )
+        scorer = _resolve_scorer(cfg, run_dir, scores_provider)
+        # CT attends across flashes: re-score at each r with pack_selection(..., r=r).
+        # Independent CNNs keep one-shot scoring (subset by r only at decode).
+        if isinstance(scorer, ContextualFlashScorer):
+            eval_result = evaluate_selections(
+                selections,
+                None,
+                protocol.decode,
+                cfg.repetitions,
+                n_classes=protocol.grid.n_rows * protocol.grid.n_cols,
+                soa_s=protocol.soa_s,
+                flashes_per_repeat=protocol.flashes_per_repeat,
+                mode=mode,
+                grid=protocol.grid,
+                early_stop=cfg.online.early_stop,
+                margin_tau=cfg.online.margin_tau,
+                score_fn=lambda sel, r: scorer.predict_scores(sel, r=r),
+            )
+        else:
+            scores_per_sel = [scorer.predict_scores(sel) for sel in selections]
+            eval_result = evaluate_selections(
+                selections,
+                scores_per_sel,
+                protocol.decode,
+                cfg.repetitions,
+                n_classes=protocol.grid.n_rows * protocol.grid.n_cols,
+                soa_s=protocol.soa_s,
+                flashes_per_repeat=protocol.flashes_per_repeat,
+                mode=mode,
+                grid=protocol.grid,
+                early_stop=cfg.online.early_stop,
+                margin_tau=cfg.online.margin_tau,
+            )
 
     speller_dir = _resolve_speller_dir(run_dir, cfg.tag)
     speller_dir.mkdir(parents=True, exist_ok=False)

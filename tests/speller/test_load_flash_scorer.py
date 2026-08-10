@@ -71,8 +71,8 @@ def test_load_flash_scorer_missing_artifacts(tmp_path):
         load_flash_scorer_from_run(empty, model_mode="flash_scorer")
 
 
-def test_load_flash_scorer_selection_classifier_not_implemented(tmp_path):
+def test_load_flash_scorer_rejects_selection_classifier_mode(tmp_path):
     run_dir = _binary_run(tmp_path)
 
-    with pytest.raises(NotImplementedError, match="selection_classifier"):
+    with pytest.raises(ValueError, match="selection_classifier"):
         load_flash_scorer_from_run(run_dir, model_mode="selection_classifier")
