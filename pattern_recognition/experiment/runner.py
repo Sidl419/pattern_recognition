@@ -19,6 +19,16 @@ from pattern_recognition.experiment.schema import ExperimentConfig
 from pattern_recognition.models import get_model
 from pattern_recognition.training.device import resolve_device
 from pattern_recognition.training.loop import train_model
+from pattern_recognition.training.sequence_loop import (
+    train_contextual_transformer,
+    train_sequence_classifier,
+)
+
+SEQUENCE_MODELS = frozenset({"ContextualTransformer", "SequenceClassifier"})
+
+
+def _is_packet_pipeline(name: str) -> bool:
+    return name.endswith("SelectionPackets")
 
 
 def _load_config(config: ExperimentConfig | dict | str | Path) -> ExperimentConfig:
@@ -82,18 +92,18 @@ def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
     started_at = datetime.now(timezone.utc)
     _set_seed(cfg.seed)
 
+    is_sequence = cfg.model.name in SEQUENCE_MODELS
+    if is_sequence and not _is_packet_pipeline(cfg.data.pipeline):
+        raise ValueError(
+            f"Sequence model {cfg.model.name!r} requires a selection-packet "
+            f"pipeline (name ending in 'SelectionPackets'); got "
+            f"{cfg.data.pipeline!r}"
+        )
+
     pipeline_cls = get_pipeline(cfg.data.pipeline)
     params = _pipeline_params(cfg)
     bundle = pipeline_cls(**params).build()
 
-    dataloaders = {
-        "train": DataLoader(
-            bundle.train, batch_size=cfg.train.batch_size, shuffle=True
-        ),
-        "val": DataLoader(bundle.val, batch_size=cfg.train.batch_size, shuffle=False),
-    }
-
-    model = get_model(cfg.model.name)(**cfg.model.params)
     learning_params = {
         "lr": cfg.train.lr,
         "weight_decay": cfg.train.weight_decay,
@@ -102,15 +112,55 @@ def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
         "num_epochs": cfg.train.num_epochs,
         "model_type": "CNN",
     }
-    criterion = nn.MSELoss()
-    val_loss_history, acc_dict, time_elapsed = train_model(
-        model,
-        dataloaders,
-        criterion,
-        learning_params,
-        is_binary=True,
-        device=device,
-    )
+    model = get_model(cfg.model.name)(**cfg.model.params)
+
+    if is_sequence:
+        # Lazy: avoid importing speller package at module load (circular risk).
+        from pattern_recognition.speller.packing import collate_selection_packets
+
+        dataloaders = {
+            "train": DataLoader(
+                bundle.train,
+                batch_size=cfg.train.batch_size,
+                shuffle=True,
+                collate_fn=collate_selection_packets,
+            ),
+            "val": DataLoader(
+                bundle.val,
+                batch_size=cfg.train.batch_size,
+                shuffle=False,
+                collate_fn=collate_selection_packets,
+            ),
+        }
+        if cfg.model.name == "ContextualTransformer":
+            val_loss_history, acc_dict, time_elapsed = train_contextual_transformer(
+                model, dataloaders, learning_params, device=device
+            )
+            model_mode = "flash_scorer"
+        else:
+            val_loss_history, acc_dict, time_elapsed = train_sequence_classifier(
+                model, dataloaders, learning_params, device=device
+            )
+            model_mode = "selection_classifier"
+    else:
+        dataloaders = {
+            "train": DataLoader(
+                bundle.train, batch_size=cfg.train.batch_size, shuffle=True
+            ),
+            "val": DataLoader(
+                bundle.val, batch_size=cfg.train.batch_size, shuffle=False
+            ),
+        }
+        criterion = nn.MSELoss()
+        val_loss_history, acc_dict, time_elapsed = train_model(
+            model,
+            dataloaders,
+            criterion,
+            learning_params,
+            is_binary=True,
+            device=device,
+        )
+        model_mode = "flash_scorer"
 
     timestamp = started_at.strftime("%Y%m%d_%H%M%S")
     run_dir = Path(cfg.output_dir) / f"{cfg.name}_{timestamp}"
@@ -131,6 +181,7 @@ def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
         "device_requested": device_requested,
         "device_resolved": device_resolved,
         "name": cfg.name,
+        "model_mode": model_mode,
     }
     (run_dir / "run_meta.json").write_text(json.dumps(run_meta, indent=2) + "\n")
 
