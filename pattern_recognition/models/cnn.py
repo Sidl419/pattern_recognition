@@ -65,52 +65,6 @@ class FlexCNN(nn.Module):
         return x
 
 
-class EEGNet(nn.Module):
-    def __init__(self, sample_len=72, in_channels=64, num_classes=2):
-        super(EEGNet, self).__init__()
-        self.sample_len = sample_len
-        self.in_channels = in_channels
-
-        F1 = 8
-        F2 = 16
-        D = 2
-
-        self.conv1 = nn.Conv2d(1, F1, (1, sample_len // 2), padding="same")
-        self.bn1 = nn.BatchNorm2d(F1, False)
-
-        self.conv2 = nn.Conv2d(F1, D * F1, (in_channels, 1), groups=F1)
-        self.bn2 = nn.BatchNorm2d(D * F1, False)
-        self.pool1 = nn.AvgPool2d(1, 4)
-        self.drop1 = nn.Dropout(p=0.5, inplace=False)
-
-        self.conv3 = nn.Conv2d(D * F1, F2, (1, D), groups=D * F1, padding="same")
-        self.bn3 = nn.BatchNorm2d(D * F1, False)
-        self.pool2 = nn.AvgPool2d(1, 8)
-        self.hook = nn.Dropout(p=0.5, inplace=False)
-
-        self.classifier_input_size = 72 // 24 * F2
-        self.classifier = nn.Linear(self.classifier_input_size, num_classes, bias=True)
-        self.sig = nn.Sigmoid()
-
-    def forward(self, x):
-        x = torch.unsqueeze(x, 1)
-        x = self.conv1(x)
-        x = self.bn1(x)
-
-        x = self.conv2(x)
-        x = F.elu(self.bn2(x))
-        x = self.pool1(x)
-        x = self.drop1(x)
-
-        x = self.conv3(x)
-        x = F.elu(self.bn3(x))
-        x = torch.flatten(self.pool2(x), 1)
-        x = self.hook(x)
-
-        x = self.sig(self.classifier(x))
-        return x
-
-
 class CecottiCNN(nn.Module):
     def __init__(
         self, input_feat_dim, n_channels=64, num_layers=2, num_classes=2, num_fiters=10
@@ -343,6 +297,7 @@ class P300SequenceEncoder(nn.Module):
         dropout: float = 0.15,
         max_flashes: int = 180,
         max_repetitions: int = 15,
+        num_stimulus_codes: int = 13,
     ):
         super().__init__()
         if d_model % nhead != 0:
@@ -351,13 +306,14 @@ class P300SequenceEncoder(nn.Module):
         self.eegnet = eegnet
         self.max_flashes = max_flashes
         self.max_repetitions = max_repetitions
+        self.num_stimulus_codes = num_stimulus_codes
         feature_dim = eegnet.classifier.in_features
         self.feature_projection = nn.Sequential(
             nn.Linear(feature_dim, d_model),
             nn.LayerNorm(d_model),
             nn.Dropout(dropout),
         )
-        self.code_embedding = nn.Embedding(13, d_model, padding_idx=0)
+        self.code_embedding = nn.Embedding(num_stimulus_codes, d_model, padding_idx=0)
         self.repetition_embedding = nn.Embedding(max_repetitions, d_model)
         self.position_embedding = nn.Embedding(max_flashes, d_model)
 
@@ -389,8 +345,12 @@ class P300SequenceEncoder(nn.Module):
             raise ValueError(f"got {flashes} flashes; max_flashes is {self.max_flashes}")
         if stimulus_codes.shape != (batch, flashes) or repetitions.shape != (batch, flashes):
             raise ValueError("stimulus_codes and repetitions must have shape [batch, flashes]")
-        if stimulus_codes.min() < 0 or stimulus_codes.max() > 12:
-            raise ValueError("stimulus_codes must be in 0..12; zero is padding only")
+        max_code = int(stimulus_codes.max().item())
+        if stimulus_codes.min() < 0 or max_code >= self.num_stimulus_codes:
+            raise ValueError(
+                f"stimulus_codes must be in 0..{self.num_stimulus_codes - 1}; "
+                "zero is padding only"
+            )
         if repetitions.min() < 0 or repetitions.max() >= self.max_repetitions:
             raise ValueError("repetitions outside configured range")
 
@@ -459,17 +419,33 @@ class SequenceClassifier(nn.Module):
     """Direct character decoder: P(row, column | complete flash sequence)."""
 
     def __init__(
-        self, sequence_encoder: P300SequenceEncoder, include_character_head: bool = True
+        self,
+        sequence_encoder: P300SequenceEncoder,
+        *,
+        head_mode: str = "rowcol",
+        include_character_head: bool = True,
+        n_cells: int = 16,
     ):
         super().__init__()
         self.sequence_encoder = sequence_encoder
+        self.head_mode = head_mode
         d_model = sequence_encoder.code_embedding.embedding_dim
         self.pool_attention = nn.Linear(d_model, 1)
-        self.row_classifier = nn.Linear(d_model, 6)
-        self.column_classifier = nn.Linear(d_model, 6)
-        self.character_classifier = (
-            nn.Linear(d_model, 36) if include_character_head else None
-        )
+
+        if head_mode == "rowcol":
+            self.row_classifier = nn.Linear(d_model, 6)
+            self.column_classifier = nn.Linear(d_model, 6)
+            self.character_classifier = (
+                nn.Linear(d_model, 36) if include_character_head else None
+            )
+        elif head_mode == "cell":
+            self.row_classifier = None
+            self.column_classifier = None
+            self.character_classifier = nn.Linear(d_model, n_cells)
+        else:
+            raise ValueError(
+                f"head_mode must be 'rowcol' or 'cell', got {head_mode!r}"
+            )
 
     def forward(self, *args, **kwargs) -> dict[str, torch.Tensor]:
         embeddings, valid_mask = self.sequence_encoder(*args, **kwargs)
@@ -477,10 +453,11 @@ class SequenceClassifier(nn.Module):
         weights = weights.masked_fill(~valid_mask, float("-inf")).softmax(dim=1)
         pooled = torch.einsum("bs,bsd->bd", weights, embeddings)
 
-        output = {
-            "row_logits": self.row_classifier(pooled),
-            "column_logits": self.column_classifier(pooled),
-        }
+        output: dict[str, torch.Tensor] = {}
+        if self.row_classifier is not None:
+            output["row_logits"] = self.row_classifier(pooled)
+        if self.column_classifier is not None:
+            output["column_logits"] = self.column_classifier(pooled)
         if self.character_classifier is not None:
             output["character_logits"] = self.character_classifier(pooled)
         return output
@@ -488,18 +465,28 @@ class SequenceClassifier(nn.Module):
     @staticmethod
     def loss(
         output: dict[str, torch.Tensor],
-        row_targets: torch.Tensor,
-        column_targets: torch.Tensor,
+        row_targets: Optional[torch.Tensor] = None,
+        column_targets: Optional[torch.Tensor] = None,
         character_targets: Optional[torch.Tensor] = None,
         character_weight: float = 0.25,
     ) -> torch.Tensor:
-        loss = F.cross_entropy(output["row_logits"], row_targets.long())
-        loss = loss + F.cross_entropy(output["column_logits"], column_targets.long())
-        if character_targets is not None and "character_logits" in output:
-            loss = loss + character_weight * F.cross_entropy(
-                output["character_logits"], character_targets.long()
-            )
-        return loss
+        if "row_logits" in output and "column_logits" in output:
+            if row_targets is None or column_targets is None:
+                raise ValueError("row_targets and column_targets required for rowcol head")
+            loss = F.cross_entropy(output["row_logits"], row_targets.long())
+            loss = loss + F.cross_entropy(output["column_logits"], column_targets.long())
+            if character_targets is not None and "character_logits" in output:
+                loss = loss + character_weight * F.cross_entropy(
+                    output["character_logits"], character_targets.long()
+                )
+            return loss
+
+        if "character_logits" in output:
+            if character_targets is None:
+                raise ValueError("character_targets required for cell head")
+            return F.cross_entropy(output["character_logits"], character_targets.long())
+
+        raise ValueError("output dict has no active classification heads")
 
 
 class DeepConvNet(nn.Module):
