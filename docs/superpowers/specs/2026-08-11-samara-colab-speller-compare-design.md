@@ -1,7 +1,7 @@
 # Samara Colab speller comparison (SVM + CNNs + sequence)
 
 **Date:** 2026-08-11  
-**Status:** Approved  
+**Status:** Approved / implemented  
 **Scope:** Register sklearn `SVM` in the experiment runner as a first-class `flash_scorer`; add Samara `n_average=1` train/speller configs; ship a Colab notebook that trains **SVM, EEGNet, BaseCNN, ContextualTransformer, SequenceClassifier** and compares them on the Samara within-subject character (speller) benchmark.
 
 **Related:**
