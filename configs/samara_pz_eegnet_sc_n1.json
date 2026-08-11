@@ -1,5 +1,5 @@
 {
-  "name": "samara_pz_basecnn_sc_n1",
+  "name": "samara_pz_eegnet_sc_n1",
   "seed": 0,
   "device": "auto",
   "split": {
@@ -18,7 +18,7 @@
     }
   },
   "model": {
-    "name": "BaseCNN",
+    "name": "EEGNet",
     "params": {
       "n_channels": 1,
       "input_feat_dim": 250

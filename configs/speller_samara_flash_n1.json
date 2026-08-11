@@ -1,0 +1,30 @@
+{
+  "tag": "samara_flash_n1_r10",
+  "model_mode": "flash_scorer",
+  "protocol": "samara_single_flash_sim",
+  "subject_mode": "within_subject",
+  "test_subjects": null,
+  "repetitions": [1, 2, 5, 10],
+  "online": {"early_stop": false, "margin_tau": null},
+  "run_dir": "results/<binary_or_ct_run>/",
+  "split": {
+    "seed": 0,
+    "epoch_holdout": 0.3,
+    "stratify": true,
+    "val_fraction": 0.2
+  },
+  "simulation": {
+    "seed": 0,
+    "phrase": "JUST_DO_IT"
+  },
+  "use_synthetic": false,
+  "protocol_params": {
+    "path": "Samara_data/",
+    "channel_idx": 1,
+    "epoch_len": 250,
+    "file_pattern": "S*-P300_classic.mat"
+  },
+  "allow_split_mismatch": false,
+  "allow_train_pool_eval": false,
+  "plots": true
+}

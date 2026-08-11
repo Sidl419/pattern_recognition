@@ -130,6 +130,9 @@ def test_shared_split_train_eval_indices_disjoint():
     [
         ("samara_contextual_transformer.json", "speller_samara_contextual.json"),
         ("samara_sequence_classifier.json", "speller_samara_sequence_classifier.json"),
+        ("samara_pz_eegnet_sc_n1.json", "speller_samara_flash_n1.json"),
+        ("samara_pz_basecnn_sc_n1.json", "speller_samara_flash_n1.json"),
+        ("samara_pz_svm_sc_n1.json", "speller_samara_flash_n1.json"),
     ],
 )
 def test_samara_train_example_configs_have_top_level_split(
@@ -166,6 +169,25 @@ def test_ct_sc_train_example_configs_include_data_protocol(
     assert cfg.data.params.get("protocol") == expected_protocol
     dumped = json.loads(cfg.model_dump_json())
     assert dumped["data"]["params"]["protocol"] == expected_protocol
+
+
+@pytest.mark.parametrize(
+    ("train_name", "expected_epochs"),
+    [
+        ("samara_pz_eegnet_sc_n1.json", 250),
+        ("samara_pz_basecnn_sc_n1.json", 250),
+        ("samara_pz_svm_sc_n1.json", 1),
+    ],
+)
+def test_samara_pz_n1_configs_average_and_epochs(
+    train_name: str, expected_epochs: int
+):
+    """Binary n1 configs must use single-trial averaging; CNNs train for 250 epochs."""
+    root = Path(__file__).resolve().parents[1] / "configs"
+    payload = json.loads((root / train_name).read_text())
+    cfg = ExperimentConfig.model_validate(payload)
+    assert cfg.data.params.get("n_average") == 1
+    assert cfg.train.num_epochs == expected_epochs
 
 
 def test_samara_speller_rejects_binary_run_without_split(tmp_path: Path):

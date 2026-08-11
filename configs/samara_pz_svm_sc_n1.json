@@ -1,5 +1,5 @@
 {
-  "name": "samara_pz_basecnn_sc_n1",
+  "name": "samara_pz_svm_sc_n1",
   "seed": 0,
   "device": "auto",
   "split": {
@@ -18,19 +18,20 @@
     }
   },
   "model": {
-    "name": "BaseCNN",
+    "name": "SVM",
     "params": {
-      "n_channels": 1,
-      "input_feat_dim": 250
+      "C": 1.0,
+      "kernel": "rbf",
+      "probability": true
     }
   },
   "train": {
     "lr": 0.0001,
     "weight_decay": 0.01,
     "batch_size": 64,
-    "num_epochs": 250,
-    "step_size": 20,
-    "gamma": 0.5,
+    "num_epochs": 1,
+    "step_size": 1,
+    "gamma": 1.0,
     "save_model": true
   },
   "output_dir": "results/"
