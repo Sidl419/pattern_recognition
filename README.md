@@ -59,14 +59,14 @@ SJTU Emotion EEG Dataset (standard public release): **15 subjects**, **62 channe
 
 | Setup | Modes / notes | Config / entry |
 |---|---|---|
-| Within-subject epoch averaging | **MC** (N epochs → N channels) vs **SC** (average → 1 channel); typical N=5/10 | [`configs/samara_pz_eegnet_sc_n10.json`](configs/samara_pz_eegnet_sc_n10.json), [`configs/samara_pz_basecnn_sc_n10.json`](configs/samara_pz_basecnn_sc_n10.json); pipeline `SamaraWithinSubjectAverage` |
+| Within-subject epoch averaging | **MC** (N epochs → N channels) vs **SC** (average → 1 channel); typical N=5/10; fair flash-level compare uses **N=1** (`*_sc_n1`) | [`configs/samara_pz_eegnet_sc_n10.json`](configs/samara_pz_eegnet_sc_n10.json), [`configs/samara_pz_basecnn_sc_n10.json`](configs/samara_pz_basecnn_sc_n10.json), [`configs/samara_pz_eegnet_sc_n1.json`](configs/samara_pz_eegnet_sc_n1.json), [`configs/samara_pz_svm_sc_n1.json`](configs/samara_pz_svm_sc_n1.json); pipeline `SamaraWithinSubjectAverage` |
 | Cross-subject / mixed / K-trials | Historical protocols in notebooks | `multi_eeg_notebooks/epoch_averaging.ipynb` |
 | Time-shifted multi-channel windows | Long epochs → shifted windows | pipeline `SamaraTimeShift` |
 | BCI III Pz epoch-average | Subjects A/B validation | pipeline `BCI3PzEpochAverage` |
 | Synthetic smoke / CI | Tiny binary tensors | [`configs/synthetic_smoke.json`](configs/synthetic_smoke.json); pipeline `SyntheticBinary` |
 | GNN static / edge-learning graphs | Delaunay / k-NN / prior; edge-learn models | `notebooks/` (runner support not in v1) |
 
-Example notebook (run → load → compare): [`notebooks/examples/run_experiment_samara.ipynb`](notebooks/examples/run_experiment_samara.ipynb).
+Example notebooks: [`notebooks/examples/run_experiment_samara.ipynb`](notebooks/examples/run_experiment_samara.ipynb) (run → load → compare); [`notebooks/examples/samara_speller_compare_colab.ipynb`](notebooks/examples/samara_speller_compare_colab.ipynb) (Colab five-model speller benchmark).
 
 ## Speller benchmark
 
@@ -96,11 +96,11 @@ Example configs: [`configs/speller_bci3_within.json`](configs/speller_bci3_withi
 | `SequenceClassifier` | row+col / cell (protocol heads) | `selection_classifier` | Selection-packet pipelines; direct symbol decode |
 | `BaseCNN` | binary epochs | `flash_scorer` | Simple 1D-CNN baseline |
 | `DeepConvNet`, `CecottiCNN`, `BaseCNNAttn`, `FlexCNN` | — | — | Importable; not all registered for the runner |
-| SVM (RBF) | — | — | Classical baseline in historical notebooks |
+| `SVM` | binary epochs | `flash_scorer` | Registered sklearn RBF baseline; checkpoint `model.joblib` |
 | `BaseGNN`, `GIN`, `STGCN`, … | — | — | Static-graph GNN family for 64-ch / SEED notebooks |
 | `EdgeLearnGNN`, `PriorEdgeLearnGNN`, … | — | — | Adaptive / learned-edge GNNs |
 
-Runner registers **`EEGNet`**, **`BaseCNN`**, **`ContextualTransformer`**, and **`SequenceClassifier`**.
+Runner registers **`SVM`**, **`EEGNet`**, **`BaseCNN`**, **`ContextualTransformer`**, and **`SequenceClassifier`**.
 
 **Three-way P300 comparison** (BCI3 or Samara): train EEGNet on a binary pipeline, CT/SC on `BCI3SelectionPackets` / `SamaraSelectionPackets`, then evaluate with matching speller configs (`flash_scorer` for EEGNet/CT, `selection_classifier` for SC). Stimulus pad index is `0`; BCI3 model codes `1..12` (`num_stimulus_codes=13`), Samara cells `1..16` (`num_stimulus_codes=17`). Samara sequence runs always use `label_source: simulated`. See [`docs/superpowers/specs/2026-08-10-p300-sequence-models-design.md`](docs/superpowers/specs/2026-08-10-p300-sequence-models-design.md).
 
@@ -139,7 +139,7 @@ python -m pattern_recognition.experiment run configs/samara_pz_eegnet_sc_n10.jso
 python -m pattern_recognition.experiment run configs/samara_pz_basecnn_sc_n10.json
 ```
 
-Artifacts land under `results/<name>_<timestamp>/` (`config.json`, `run_meta.json`, `metrics.json`, `history.npz`, optional `model.pt`).
+Artifacts land under `results/<name>_<timestamp>/` (`config.json`, `run_meta.json`, `metrics.json`, `history.npz`, optional `model.pt` or `model.joblib` for SVM).
 
 Programmatic:
 
