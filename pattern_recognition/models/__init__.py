@@ -84,11 +84,19 @@ def build_sequence_classifier(**params: Any):
     return SequenceClassifier(encoder, **sc_params)
 
 
+@register_model("SVM")
+def build_svm(**params: Any):
+    from pattern_recognition.models.classical import SklearnSVM
+
+    return SklearnSVM(**params)
+
+
 __all__ = [
     "build_basecnn",
     "build_contextual_transformer",
     "build_eegnet",
     "build_sequence_classifier",
+    "build_svm",
     "get_model",
     "list_models",
     "register_model",

@@ -24,6 +24,7 @@ def test_expected_pipelines_and_models_registered():
     assert "BaseCNN" in models
     assert "ContextualTransformer" in models
     assert "SequenceClassifier" in models
+    assert "SVM" in models
 
 
 def test_sequence_model_factories_build():
