@@ -25,7 +25,8 @@ from pattern_recognition.training.sequence_loop import (
 )
 
 SEQUENCE_MODELS = frozenset({"ContextualTransformer", "SequenceClassifier"})
-BINARY_PACKET_FORBIDDEN = frozenset({"EEGNet", "BaseCNN"})
+CLASSICAL_MODELS = frozenset({"SVM"})
+BINARY_PACKET_FORBIDDEN = frozenset({"EEGNet", "BaseCNN", "SVM"})
 
 
 def _is_packet_pipeline(name: str) -> bool:
@@ -94,6 +95,7 @@ def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
     _set_seed(cfg.seed)
 
     is_sequence = cfg.model.name in SEQUENCE_MODELS
+    is_classical = cfg.model.name in CLASSICAL_MODELS
     if is_sequence and not _is_packet_pipeline(cfg.data.pipeline):
         raise ValueError(
             f"Sequence model {cfg.model.name!r} requires a selection-packet "
@@ -123,7 +125,14 @@ def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
     }
     model = get_model(cfg.model.name)(**cfg.model.params)
 
-    if is_sequence:
+    if is_classical:
+        from pattern_recognition.training.svm_loop import train_svm
+
+        val_loss_history, acc_dict, time_elapsed = train_svm(
+            model, bundle.train, bundle.val
+        )
+        model_mode = "flash_scorer"
+    elif is_sequence:
         # Lazy: avoid importing speller package at module load (circular risk).
         from pattern_recognition.speller.packing import collate_selection_packets
 
@@ -215,6 +224,11 @@ def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
     np.savez(run_dir / "history.npz", **history_arrays)
 
     if cfg.train.save_model:
-        torch.save(model.state_dict(), run_dir / "model.pt")
+        if is_classical:
+            import joblib
+
+            joblib.dump(model.fitted_estimator, run_dir / "model.joblib")
+        else:
+            torch.save(model.state_dict(), run_dir / "model.pt")
 
     return run_dir
