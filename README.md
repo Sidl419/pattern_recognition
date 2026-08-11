@@ -59,7 +59,7 @@ SJTU Emotion EEG Dataset (standard public release): **15 subjects**, **62 channe
 
 | Setup | Modes / notes | Config / entry |
 |---|---|---|
-| Within-subject epoch averaging | **MC** (N epochs → N channels) vs **SC** (average → 1 channel); typical N=5/10; fair flash-level compare uses **N=1** (`*_sc_n1`) | [`configs/samara_pz_eegnet_sc_n10.json`](configs/samara_pz_eegnet_sc_n10.json), [`configs/samara_pz_basecnn_sc_n10.json`](configs/samara_pz_basecnn_sc_n10.json), [`configs/samara_pz_eegnet_sc_n1.json`](configs/samara_pz_eegnet_sc_n1.json), [`configs/samara_pz_svm_sc_n1.json`](configs/samara_pz_svm_sc_n1.json); pipeline `SamaraWithinSubjectAverage` |
+| Within-subject epoch averaging | **MC** (N epochs → N channels) vs **SC** (average → 1 channel); typical N=5/10; fair flash-level compare uses **N=1** (`*_sc_n1`) | [`configs/samara_pz_eegnet_sc_n10.json`](configs/samara_pz_eegnet_sc_n10.json), [`configs/samara_pz_basecnn_sc_n10.json`](configs/samara_pz_basecnn_sc_n10.json), [`configs/samara_pz_eegnet_sc_n1.json`](configs/samara_pz_eegnet_sc_n1.json), [`configs/samara_pz_basecnn_sc_n1.json`](configs/samara_pz_basecnn_sc_n1.json), [`configs/samara_pz_svm_sc_n1.json`](configs/samara_pz_svm_sc_n1.json); pipeline `SamaraWithinSubjectAverage` |
 | Cross-subject / mixed / K-trials | Historical protocols in notebooks | `multi_eeg_notebooks/epoch_averaging.ipynb` |
 | Time-shifted multi-channel windows | Long epochs → shifted windows | pipeline `SamaraTimeShift` |
 | BCI III Pz epoch-average | Subjects A/B validation | pipeline `BCI3PzEpochAverage` |
