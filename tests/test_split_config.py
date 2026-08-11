@@ -179,9 +179,7 @@ def test_ct_sc_train_example_configs_include_data_protocol(
         ("samara_pz_svm_sc_n1.json", 1),
     ],
 )
-def test_samara_pz_n1_configs_average_and_epochs(
-    train_name: str, expected_epochs: int
-):
+def test_samara_pz_n1_configs_average_and_epochs(train_name: str, expected_epochs: int):
     """Binary n1 configs must use single-trial averaging; CNNs train for 250 epochs."""
     root = Path(__file__).resolve().parents[1] / "configs"
     payload = json.loads((root / train_name).read_text())

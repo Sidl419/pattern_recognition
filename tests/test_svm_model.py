@@ -5,9 +5,12 @@ from pattern_recognition.models.classical import SklearnSVM
 
 
 def test_svm_registered():
-    assert "SVM" in __import__(
-        "pattern_recognition.models", fromlist=["list_models"]
-    ).list_models()
+    assert (
+        "SVM"
+        in __import__(
+            "pattern_recognition.models", fromlist=["list_models"]
+        ).list_models()
+    )
 
 
 def test_sklearn_svm_fit_and_scores():
