@@ -24,7 +24,8 @@ test-v: ## Run full test suite (verbose)
 test-speller: ## Run speller tests only
 	$(POETRY) run pytest tests/speller/ $(PYTEST_OPTS)
 
-format: ## Format package + tests with Ruff
+format: ## Format + apply safe Ruff lint autofixes (imports, etc.)
+	$(POETRY) run ruff check --fix $(RUFF_PATHS)
 	$(POETRY) run ruff format $(RUFF_PATHS)
 
 format-check: ## Check formatting without writing

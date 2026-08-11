@@ -100,9 +100,8 @@ def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
             f"pipeline (name ending in 'SelectionPackets'); got "
             f"{cfg.data.pipeline!r}"
         )
-    if (
-        cfg.model.name in BINARY_PACKET_FORBIDDEN
-        and _is_packet_pipeline(cfg.data.pipeline)
+    if cfg.model.name in BINARY_PACKET_FORBIDDEN and _is_packet_pipeline(
+        cfg.data.pipeline
     ):
         raise ValueError(
             f"Binary model {cfg.model.name!r} cannot use selection-packet "

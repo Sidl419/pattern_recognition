@@ -38,9 +38,7 @@ def stimulus_ids_to_model_codes(ids: np.ndarray, protocol: str) -> np.ndarray:
     return ids + 1
 
 
-def flash_targets_for_selection(
-    selection: Selection, protocol: str
-) -> np.ndarray:
+def flash_targets_for_selection(selection: Selection, protocol: str) -> np.ndarray:
     _validate_protocol(protocol)
     char = selection.target_char
     if protocol == "bci3_rowcol":
@@ -137,8 +135,6 @@ def collate_selection_packets(items: list[dict]) -> dict[str, torch.Tensor]:
 
     if "row_target" in items[0]:
         batch["row_target"] = torch.stack([item["row_target"] for item in items])
-        batch["column_target"] = torch.stack(
-            [item["column_target"] for item in items]
-        )
+        batch["column_target"] = torch.stack([item["column_target"] for item in items])
 
     return batch

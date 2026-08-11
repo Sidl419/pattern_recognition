@@ -1,3 +1,4 @@
+import pattern_recognition.models  # noqa: F401 — register factories
 import pytest
 from pattern_recognition.data.pipelines.registry import (
     get_pipeline,
@@ -23,6 +24,27 @@ def test_expected_pipelines_and_models_registered():
     assert "BaseCNN" in models
     assert "ContextualTransformer" in models
     assert "SequenceClassifier" in models
+
+
+def test_sequence_model_factories_build():
+    """Factory params build CT (BCI3 codes) and SC cell head (Samara codes)."""
+    ct = get_model("ContextualTransformer")(
+        eegnet={"input_feat_dim": 64, "in_channels": 1},
+        d_model=32,
+        nhead=4,
+        num_stimulus_codes=13,
+        max_flashes=32,
+    )
+    sc = get_model("SequenceClassifier")(
+        eegnet={"input_feat_dim": 64, "in_channels": 1},
+        d_model=32,
+        nhead=4,
+        num_stimulus_codes=17,
+        max_flashes=32,
+        head_mode="cell",
+        n_cells=16,
+    )
+    assert ct is not None and sc is not None
 
 
 def test_unknown_registry_entry_lists_options():

@@ -103,9 +103,7 @@ class ContextualFlashScorer:
         self._device = device
         self._protocol = protocol
 
-    def predict_scores(
-        self, selection: Selection, r: int | None = None
-    ) -> np.ndarray:
+    def predict_scores(self, selection: Selection, r: int | None = None) -> np.ndarray:
         packed = pack_selection(selection, protocol=self._protocol, r=r)
         epochs = packed["epochs"].unsqueeze(0).to(self._device)
         stimulus_codes = packed["stimulus_codes"].unsqueeze(0).to(self._device)
@@ -188,7 +186,9 @@ def _load_run_checkpoint(
 
     _, device = resolve_device(device_requested)
     model = get_model(exp_cfg.model.name)(**exp_cfg.model.params)
-    state = torch.load(checkpoint_path, map_location=device, weights_only=True)
+    # Local run_dir checkpoints only. Torch 2.0 ``weights_only=True`` still
+    # touches TypedStorage and warns on every parameter; False is safe here.
+    state = torch.load(checkpoint_path, map_location=device, weights_only=False)
     model.load_state_dict(state)
     model.to(device)
     return exp_cfg, model, device, meta
@@ -204,9 +204,7 @@ def _assert_train_speller_protocol(
     if speller_protocol is None:
         return
     if not train_protocol:
-        raise ValueError(
-            f"{model_name} run config must set data.params.protocol"
-        )
+        raise ValueError(f"{model_name} run config must set data.params.protocol")
     if train_protocol != speller_protocol:
         raise ValueError(
             f"Speller protocol {speller_protocol!r} does not match train "
@@ -277,9 +275,7 @@ def load_selection_classifier_from_run(
 
     train_protocol = exp_cfg.data.params.get("protocol")
     if not train_protocol:
-        raise ValueError(
-            "SequenceClassifier run config must set data.params.protocol"
-        )
+        raise ValueError("SequenceClassifier run config must set data.params.protocol")
     _assert_train_speller_protocol(
         train_protocol, protocol, model_name="SequenceClassifier"
     )
@@ -704,12 +700,9 @@ def run_speller_benchmark(
             )
         if cfg.online.early_stop:
             raise ValueError(
-                "online.early_stop is not implemented for "
-                "selection_classifier mode"
+                "online.early_stop is not implemented for selection_classifier mode"
             )
-        predictor = load_selection_classifier_from_run(
-            run_dir, protocol=cfg.protocol
-        )
+        predictor = load_selection_classifier_from_run(run_dir, protocol=cfg.protocol)
         eval_result = _evaluate_symbol_predictor(
             selections,
             predictor,

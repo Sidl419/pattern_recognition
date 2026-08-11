@@ -268,6 +268,40 @@ class EEGNet(nn.Module):
         return self.classifier(self.extract_features(x))
 
 
+class _NonNativeMultiheadAttention(nn.MultiheadAttention):
+    """Multi-head attention that skips Torch 2.0's native fused kernel.
+
+    ``torch._native_multi_head_attention`` converts bool padding masks to the
+    query dtype then warns when converting back inside SDPA. Using distinct
+    query/key/value tensor identities forces the portable
+    ``F.multi_head_attention_forward`` path (same math, no warning).
+    """
+
+    def forward(self, query, key, value, *args, **kwargs):  # type: ignore[override]
+        if query is key and key is value:
+            key = value = query.clone()
+        return super().forward(query, key, value, *args, **kwargs)
+
+
+class _NonFusedTransformerEncoderLayer(nn.TransformerEncoderLayer):
+    """Encoder layer that never enters ``_transformer_encoder_layer_fwd``.
+
+    The fused eval path has the same padding-mask dtype warning as native MHA
+    on Torch 2.0. The Python ``_sa_block`` / ``_ff_block`` path is equivalent.
+    """
+
+    def forward(self, src, src_mask=None, src_key_padding_mask=None, is_causal=False):
+        del is_causal  # causal masking is supplied via ``src_mask`` by callers
+        x = src
+        if self.norm_first:
+            x = x + self._sa_block(self.norm1(x), src_mask, src_key_padding_mask)
+            x = x + self._ff_block(self.norm2(x))
+        else:
+            x = self.norm1(x + self._sa_block(x, src_mask, src_key_padding_mask))
+            x = self.norm2(x + self._ff_block(x))
+        return x
+
+
 class P300SequenceEncoder(nn.Module):
     """Embed every P300 flash with EEGNet and contextualise a character sequence.
 
@@ -317,7 +351,7 @@ class P300SequenceEncoder(nn.Module):
         self.repetition_embedding = nn.Embedding(max_repetitions, d_model)
         self.position_embedding = nn.Embedding(max_flashes, d_model)
 
-        layer = nn.TransformerEncoderLayer(
+        layer = _NonFusedTransformerEncoderLayer(
             d_model=d_model,
             nhead=nhead,
             dim_feedforward=dim_feedforward,
@@ -326,6 +360,11 @@ class P300SequenceEncoder(nn.Module):
             batch_first=True,
             norm_first=True,
         )
+        safe_attn = _NonNativeMultiheadAttention(
+            d_model, nhead, dropout=dropout, batch_first=True
+        )
+        safe_attn.load_state_dict(layer.self_attn.state_dict())
+        layer.self_attn = safe_attn
         self.transformer = nn.TransformerEncoder(
             layer, num_layers=num_layers, norm=nn.LayerNorm(d_model)
         )
@@ -339,12 +378,21 @@ class P300SequenceEncoder(nn.Module):
         causal: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         if epochs.ndim != 4:
-            raise ValueError("epochs must have shape [batch, flashes, channels, samples]")
+            raise ValueError(
+                "epochs must have shape [batch, flashes, channels, samples]"
+            )
         batch, flashes, channels, samples = epochs.shape
         if flashes > self.max_flashes:
-            raise ValueError(f"got {flashes} flashes; max_flashes is {self.max_flashes}")
-        if stimulus_codes.shape != (batch, flashes) or repetitions.shape != (batch, flashes):
-            raise ValueError("stimulus_codes and repetitions must have shape [batch, flashes]")
+            raise ValueError(
+                f"got {flashes} flashes; max_flashes is {self.max_flashes}"
+            )
+        if stimulus_codes.shape != (batch, flashes) or repetitions.shape != (
+            batch,
+            flashes,
+        ):
+            raise ValueError(
+                "stimulus_codes and repetitions must have shape [batch, flashes]"
+            )
         max_code = int(stimulus_codes.max().item())
         if stimulus_codes.min() < 0 or max_code >= self.num_stimulus_codes:
             raise ValueError(
@@ -355,7 +403,9 @@ class P300SequenceEncoder(nn.Module):
             raise ValueError("repetitions outside configured range")
 
         if valid_mask is None:
-            valid_mask = torch.ones(batch, flashes, dtype=torch.bool, device=epochs.device)
+            valid_mask = torch.ones(
+                batch, flashes, dtype=torch.bool, device=epochs.device
+            )
 
         flat_epochs = epochs.reshape(batch * flashes, channels, samples)
         flash_features = self.eegnet.extract_features(flat_epochs)
@@ -376,9 +426,9 @@ class P300SequenceEncoder(nn.Module):
         x = self.transformer(
             x,
             mask=attention_mask,
-            src_key_padding_mask=~valid_mask.bool(),
+            src_key_padding_mask=~valid_mask.to(dtype=torch.bool),
         )
-        return x, valid_mask.bool()
+        return x, valid_mask.to(dtype=torch.bool)
 
 
 class ContextualTransformer(nn.Module):
@@ -444,9 +494,7 @@ class SequenceClassifier(nn.Module):
             self.column_classifier = None
             self.character_classifier = nn.Linear(d_model, n_cells)
         else:
-            raise ValueError(
-                f"head_mode must be 'rowcol' or 'cell', got {head_mode!r}"
-            )
+            raise ValueError(f"head_mode must be 'rowcol' or 'cell', got {head_mode!r}")
 
     def forward(self, *args, **kwargs) -> dict[str, torch.Tensor]:
         embeddings, valid_mask = self.sequence_encoder(*args, **kwargs)
@@ -473,9 +521,13 @@ class SequenceClassifier(nn.Module):
     ) -> torch.Tensor:
         if "row_logits" in output and "column_logits" in output:
             if row_targets is None or column_targets is None:
-                raise ValueError("row_targets and column_targets required for rowcol head")
+                raise ValueError(
+                    "row_targets and column_targets required for rowcol head"
+                )
             loss = F.cross_entropy(output["row_logits"], row_targets.long())
-            loss = loss + F.cross_entropy(output["column_logits"], column_targets.long())
+            loss = loss + F.cross_entropy(
+                output["column_logits"], column_targets.long()
+            )
             if character_targets is not None and "character_logits" in output:
                 loss = loss + character_weight * F.cross_entropy(
                     output["character_logits"], character_targets.long()

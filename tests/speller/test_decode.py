@@ -1,6 +1,32 @@
 import numpy as np
-from pattern_recognition.speller.decode import decode_rowcol, decode_single_flash
+import torch
+from pattern_recognition.speller.decode import (
+    decode_from_sequence_output,
+    decode_rowcol,
+    decode_single_flash,
+)
 from pattern_recognition.speller.grids import BCI3_GRID, COL_CODE, ROW_CODE, SAMARA_GRID
+
+
+def test_decode_rowcol_from_sequence_logits():
+    row = torch.zeros(6)
+    row[0] = 1.0
+    col = torch.zeros(6)
+    col[0] = 1.0
+    out = {"row_logits": row.unsqueeze(0), "column_logits": col.unsqueeze(0)}
+    assert decode_from_sequence_output(
+        out, "bci3_rowcol", BCI3_GRID
+    ) == BCI3_GRID.char_at(0, 0)
+
+
+def test_decode_cell_from_sequence_logits():
+    logits = torch.zeros(16)
+    logits[3] = 1.0
+    out = {"character_logits": logits.unsqueeze(0)}
+    assert (
+        decode_from_sequence_output(out, "samara_single_flash_sim", SAMARA_GRID)
+        == SAMARA_GRID.chars[3]
+    )
 
 
 def test_rowcol_picks_intersection():
@@ -24,11 +50,13 @@ def test_single_flash_argmax_cell():
 
 
 def test_bci3_codes_match_p300getter_for_a():
-    from mne.channels import make_standard_montage
+    """row/col maps on P300Getter match speller grids (no MNE FIF montage load)."""
+    from types import SimpleNamespace
+
     from pattern_recognition.data.p300 import P300Getter
 
-    eloc = make_standard_montage("standard_1005")
-    getter = P300Getter(raw_data={}, eloc=eloc, n_channels=len(eloc.ch_names))
+    eloc = SimpleNamespace(ch_names=[f"EEG{i:03d}" for i in range(64)])
+    getter = P300Getter(raw_data={}, eloc=eloc, n_channels=64)
     assert getter.row_dict["A"] == ROW_CODE["A"]
     assert getter.col_dict["A"] == COL_CODE["A"]
     assert BCI3_GRID.char_at(0, 0) == "A"

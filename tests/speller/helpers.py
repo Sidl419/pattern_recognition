@@ -14,6 +14,64 @@ DEFAULT_SPLIT = {
     "val_fraction": 0.2,
 }
 
+_SEQUENCE_TRAIN = {
+    "lr": 1e-3,
+    "weight_decay": 0.0,
+    "batch_size": 2,
+    "num_epochs": 1,
+    "step_size": 1,
+    "gamma": 1.0,
+    "save_model": True,
+}
+
+
+def synthetic_sequence_experiment_config(
+    tmp_path: Path,
+    *,
+    model_name: str,
+    name: str = "seq_smoke",
+    protocol: str = "bci3_rowcol",
+    head_mode: str = "rowcol",
+    n_cells: int = 16,
+    num_stimulus_codes: int | None = None,
+    max_flashes: int = 24,
+) -> dict[str, Any]:
+    """Minimal CT/SC train config for SyntheticSelectionPackets smoke tests."""
+    if num_stimulus_codes is None:
+        num_stimulus_codes = 17 if protocol == "samara_single_flash_sim" else 13
+    model_params: dict[str, Any] = {
+        "eegnet": {"input_feat_dim": 64, "in_channels": 1},
+        "d_model": 32,
+        "nhead": 4,
+        "num_layers": 1,
+        "num_stimulus_codes": num_stimulus_codes,
+        "max_flashes": max_flashes,
+        "max_repetitions": 15,
+    }
+    if model_name == "SequenceClassifier":
+        model_params["head_mode"] = head_mode
+        if head_mode == "cell":
+            model_params["n_cells"] = n_cells
+    return {
+        "name": name,
+        "seed": 0,
+        "device": "cpu",
+        "data": {
+            "pipeline": "SyntheticSelectionPackets",
+            "params": {
+                "protocol": protocol,
+                "n_train": 4,
+                "n_val": 2,
+                "n_channels": 1,
+                "n_times": 64,
+                "r_max": 2,
+            },
+        },
+        "model": {"name": model_name, "params": model_params},
+        "train": dict(_SEQUENCE_TRAIN),
+        "output_dir": str(tmp_path),
+    }
+
 
 def stub_binary_run(
     run_dir: Path,

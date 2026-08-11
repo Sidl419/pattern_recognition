@@ -7,46 +7,19 @@ from pattern_recognition.speller.benchmark import (
 )
 from pattern_recognition.speller.types import Selection
 
+from tests.speller.helpers import synthetic_sequence_experiment_config
 
-def _ct_run(tmp_path):
-    return run_experiment({
-        "name": "ct_scorer",
-        "seed": 0,
-        "device": "cpu",
-        "data": {
-            "pipeline": "SyntheticSelectionPackets",
-            "params": {
-                "protocol": "bci3_rowcol",
-                "n_train": 4,
-                "n_val": 2,
-                "n_channels": 1,
-                "n_times": 64,
-                "r_max": 2,
-            },
-        },
-        "model": {
-            "name": "ContextualTransformer",
-            "params": {
-                "eegnet": {"input_feat_dim": 64, "in_channels": 1},
-                "d_model": 32,
-                "nhead": 4,
-                "num_layers": 1,
-                "num_stimulus_codes": 13,
-                "max_flashes": 24,
-                "max_repetitions": 15,
-            },
-        },
-        "train": {
-            "lr": 1e-3,
-            "weight_decay": 0.0,
-            "batch_size": 2,
-            "num_epochs": 1,
-            "step_size": 1,
-            "gamma": 1.0,
-            "save_model": True,
-        },
-        "output_dir": str(tmp_path),
-    })
+
+@pytest.fixture(scope="module")
+def ct_run_dir(tmp_path_factory):
+    """One CT train for this module — load/prefix/mismatch share the checkpoint."""
+    return run_experiment(
+        synthetic_sequence_experiment_config(
+            tmp_path_factory.mktemp("ct"),
+            model_name="ContextualTransformer",
+            name="ct_scorer",
+        )
+    )
 
 
 def _two_repeat_selection(rng: np.random.Generator) -> Selection:
@@ -69,19 +42,17 @@ def _two_repeat_selection(rng: np.random.Generator) -> Selection:
     )
 
 
-def test_contextual_flash_scorer_rejects_protocol_mismatch(tmp_path):
-    run_dir = _ct_run(tmp_path)
+def test_contextual_flash_scorer_rejects_protocol_mismatch(ct_run_dir):
     with pytest.raises(ValueError, match="protocol"):
         load_flash_scorer_from_run(
-            run_dir,
+            ct_run_dir,
             model_mode="flash_scorer",
             protocol="samara_single_flash_sim",
         )
 
 
-def test_load_contextual_flash_scorer_from_run(tmp_path):
-    run_dir = _ct_run(tmp_path)
-    scorer = load_flash_scorer_from_run(run_dir, model_mode="flash_scorer")
+def test_load_contextual_flash_scorer_from_run(ct_run_dir):
+    scorer = load_flash_scorer_from_run(ct_run_dir, model_mode="flash_scorer")
     assert isinstance(scorer, ContextualFlashScorer)
     n = 12
     selection = Selection(
@@ -95,10 +66,9 @@ def test_load_contextual_flash_scorer_from_run(tmp_path):
     assert scores.shape == (n,)
 
 
-def test_contextual_prefix_r_scores_differ_from_full_context(tmp_path):
+def test_contextual_prefix_r_scores_differ_from_full_context(ct_run_dir):
     """Prefix-r packing must not leak future-repeat flashes into early logits."""
-    run_dir = _ct_run(tmp_path)
-    scorer = load_flash_scorer_from_run(run_dir, model_mode="flash_scorer")
+    scorer = load_flash_scorer_from_run(ct_run_dir, model_mode="flash_scorer")
     assert isinstance(scorer, ContextualFlashScorer)
 
     rng = np.random.default_rng(0)
@@ -112,19 +82,14 @@ def test_contextual_prefix_r_scores_differ_from_full_context(tmp_path):
     assert full.shape == (n,)
     assert at_r1.shape == (n,)
     assert np.all(at_r1[~prefix] == 0.0)
-    # Overlapping (repeat 0) flashes: truncated CT forward ≠ full-context logits.
     assert not np.allclose(at_r1[prefix], full[prefix])
 
 
-def test_evaluate_selections_calls_score_fn_per_r(tmp_path):
-    """Contextual evaluate path must re-score at each r (not one-shot full context)."""
+def test_evaluate_selections_calls_score_fn_per_r():
+    """score_fn path re-scores at each r (no CT train — contract is the loop)."""
     from pattern_recognition.speller.grids import BCI3_GRID
     from pattern_recognition.speller.metrics import evaluate_selections
     from pattern_recognition.speller.protocols import get_protocol
-
-    run_dir = _ct_run(tmp_path)
-    scorer = load_flash_scorer_from_run(run_dir, model_mode="flash_scorer")
-    assert isinstance(scorer, ContextualFlashScorer)
 
     selection = _two_repeat_selection(np.random.default_rng(1))
     protocol = get_protocol("bci3_rowcol")
@@ -132,7 +97,10 @@ def test_evaluate_selections_calls_score_fn_per_r(tmp_path):
 
     def score_fn(sel, r):
         calls.append(r)
-        return scorer.predict_scores(sel, r=r)
+        n = len(sel.flashes)
+        scores = np.zeros(n, dtype=np.float64)
+        scores[sel.repeat_index < r] = 1.0
+        return scores
 
     result = evaluate_selections(
         [selection],

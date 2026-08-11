@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from pattern_recognition.data.pipelines import get_pipeline, list_pipelines
+from pattern_recognition.data.pipelines import get_pipeline
 from pattern_recognition.speller.packing import collate_selection_packets
 from pattern_recognition.speller.types import Selection
 from torch.utils.data import DataLoader
@@ -32,57 +32,40 @@ def _fake_bci3_selection(char: str = "A", n_times: int = 8) -> Selection:
     )
 
 
-def test_selection_packet_pipelines_registered():
-    names = list_pipelines()
-    assert "BCI3SelectionPackets" in names
-    assert "SamaraSelectionPackets" in names
-    assert "SyntheticSelectionPackets" in names
-
-
-def test_bci3_selection_packets_accepts_matching_protocol(tmp_path):
-    train_mat = tmp_path / "Subject_A_Train.mat"
-    eloc = tmp_path / "eloc64.loc"
-    train_mat.write_bytes(b"x")
-    eloc.write_text("dummy")
-    pipe = get_pipeline("BCI3SelectionPackets")(
-        train_mat=str(train_mat),
-        eloc_path=str(eloc),
-        protocol="bci3_rowcol",
-    )
-    assert pipe.protocol == "bci3_rowcol"
-
-
-def test_bci3_selection_packets_rejects_mismatched_protocol(tmp_path):
-    train_mat = tmp_path / "Subject_A_Train.mat"
-    eloc = tmp_path / "eloc64.loc"
-    train_mat.write_bytes(b"x")
-    eloc.write_text("dummy")
+@pytest.mark.parametrize(
+    ("pipeline", "ok_protocol", "bad_protocol", "kwargs_factory"),
+    [
+        (
+            "BCI3SelectionPackets",
+            "bci3_rowcol",
+            "samara_single_flash_sim",
+            lambda p: {
+                "train_mat": str(p / "Subject_A_Train.mat"),
+                "eloc_path": str(p / "eloc64.loc"),
+            },
+        ),
+        (
+            "SamaraSelectionPackets",
+            "samara_single_flash_sim",
+            "bci3_rowcol",
+            lambda p: {"path": str(p / "Samara_data")},
+        ),
+    ],
+)
+def test_selection_packet_pipeline_protocol_validation(
+    tmp_path, pipeline, ok_protocol, bad_protocol, kwargs_factory
+):
+    """Matching protocol is stored; mismatched protocol is rejected."""
+    if pipeline.startswith("BCI3"):
+        (tmp_path / "Subject_A_Train.mat").write_bytes(b"x")
+        (tmp_path / "eloc64.loc").write_text("dummy")
+    else:
+        (tmp_path / "Samara_data").mkdir()
+    kwargs = kwargs_factory(tmp_path)
+    pipe = get_pipeline(pipeline)(**kwargs, protocol=ok_protocol)
+    assert pipe.protocol == ok_protocol
     with pytest.raises(ValueError, match="protocol"):
-        get_pipeline("BCI3SelectionPackets")(
-            train_mat=str(train_mat),
-            eloc_path=str(eloc),
-            protocol="samara_single_flash_sim",
-        )
-
-
-def test_samara_selection_packets_accepts_matching_protocol(tmp_path):
-    data_dir = tmp_path / "Samara_data"
-    data_dir.mkdir()
-    pipe = get_pipeline("SamaraSelectionPackets")(
-        path=str(data_dir),
-        protocol="samara_single_flash_sim",
-    )
-    assert pipe.protocol == "samara_single_flash_sim"
-
-
-def test_samara_selection_packets_rejects_mismatched_protocol(tmp_path):
-    data_dir = tmp_path / "Samara_data"
-    data_dir.mkdir()
-    with pytest.raises(ValueError, match="protocol"):
-        get_pipeline("SamaraSelectionPackets")(
-            path=str(data_dir),
-            protocol="bci3_rowcol",
-        )
+        get_pipeline(pipeline)(**kwargs, protocol=bad_protocol)
 
 
 def test_bci3_selection_packets_monkeypatched(monkeypatch, tmp_path):
