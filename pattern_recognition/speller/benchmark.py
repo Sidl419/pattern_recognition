@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+import joblib
 import numpy as np
 import torch
 
@@ -61,6 +62,25 @@ class OracleFlashScorer:
             )
         target_cell = self._grid.index_of(selection.target_char)
         return np.where(selection.stimulus_ids == target_cell, 1.0, 0.0)
+
+
+class SklearnFlashScorer:
+    """Score flashes with a fitted sklearn classifier (e.g. SVC)."""
+
+    def __init__(self, estimator) -> None:
+        self._estimator = estimator
+
+    def predict_scores(self, selection: Selection) -> np.ndarray:
+        flashes = np.asarray(selection.flashes, dtype=np.float64)
+        if flashes.ndim == 1:
+            flashes = flashes[np.newaxis, ...]
+        x = flashes.reshape(flashes.shape[0], -1)
+        est = self._estimator
+        if getattr(est, "probability", False) and hasattr(est, "predict_proba"):
+            scores = est.predict_proba(x)[:, 1]
+        else:
+            scores = est.decision_function(x)
+        return np.asarray(scores, dtype=np.float32)
 
 
 class RunFlashScorer:
@@ -161,29 +181,36 @@ class RunSelectionClassifier:
         return decode_from_sequence_output(output, self._protocol, self._grid)
 
 
-def _load_run_checkpoint(
-    run_dir: Path,
-) -> tuple[ExperimentConfig, torch.nn.Module, torch.device, dict]:
+def _load_run_config(run_dir: Path) -> tuple[ExperimentConfig, dict]:
     run_dir = Path(run_dir)
     config_path = run_dir / "config.json"
     if not config_path.is_file():
         raise FileNotFoundError(f"Binary run config not found: {config_path}")
 
-    checkpoint_path = run_dir / "model.pt"
-    if not checkpoint_path.is_file():
-        raise FileNotFoundError(
-            f"No model checkpoint at {checkpoint_path}; "
-            "train with train.save_model=true or inject scores_provider"
-        )
-
     exp_cfg = ExperimentConfig.model_validate(json.loads(config_path.read_text()))
-    device_requested = exp_cfg.device
     meta: dict = {}
     meta_path = run_dir / "run_meta.json"
     if meta_path.is_file():
         meta = json.loads(meta_path.read_text())
-        device_requested = meta.get("device_requested", device_requested)
+    return exp_cfg, meta
 
+
+def _load_run_checkpoint(
+    run_dir: Path,
+) -> tuple[ExperimentConfig, torch.nn.Module, torch.device, dict]:
+    exp_cfg, meta = _load_run_config(run_dir)
+    run_dir = Path(run_dir)
+
+    checkpoint_path = run_dir / "model.pt"
+    joblib_path = run_dir / "model.joblib"
+    if not checkpoint_path.is_file():
+        raise FileNotFoundError(
+            f"No model checkpoint at {checkpoint_path} or {joblib_path}; "
+            "train with train.save_model=true or inject scores_provider"
+        )
+
+    device_requested = exp_cfg.device
+    device_requested = meta.get("device_requested", device_requested)
     _, device = resolve_device(device_requested)
     model = get_model(exp_cfg.model.name)(**exp_cfg.model.params)
     # Local run_dir checkpoints only. Torch 2.0 ``weights_only=True`` still
@@ -230,6 +257,20 @@ def load_flash_scorer_from_run(
         )
     if model_mode != "flash_scorer":
         raise ValueError(f"Unsupported model_mode {model_mode!r}")
+
+    exp_cfg, meta = _load_run_config(run_dir)
+    run_dir = Path(run_dir)
+
+    if exp_cfg.model.name == "SVM":
+        joblib_path = run_dir / "model.joblib"
+        pt_path = run_dir / "model.pt"
+        if not joblib_path.is_file():
+            raise FileNotFoundError(
+                f"No model checkpoint at {pt_path} or {joblib_path}; "
+                "train with train.save_model=true or inject scores_provider"
+            )
+        clf = joblib.load(joblib_path)
+        return SklearnFlashScorer(clf)
 
     exp_cfg, model, device, _meta = _load_run_checkpoint(run_dir)
     if exp_cfg.model.name == "SequenceClassifier":

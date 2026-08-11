@@ -3,6 +3,7 @@
 from pattern_recognition.speller.benchmark import (
     FlashScorer,
     OracleFlashScorer,
+    SklearnFlashScorer,
     load_flash_scorer_from_run,
     run_speller_benchmark,
 )
@@ -17,6 +18,7 @@ __all__ = [
     "FlashScorer",
     "OnlineConfig",
     "OracleFlashScorer",
+    "SklearnFlashScorer",
     "SimulationConfig",
     "SpellerBenchmarkConfig",
     "SplitConfig",

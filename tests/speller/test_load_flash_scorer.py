@@ -61,7 +61,7 @@ def test_load_flash_scorer_predicts_scores(tmp_path):
 def test_load_flash_scorer_missing_artifacts(tmp_path):
     run_dir = _binary_run(tmp_path)
     (run_dir / "model.pt").unlink()
-    with pytest.raises(FileNotFoundError, match="model checkpoint"):
+    with pytest.raises(FileNotFoundError, match=r"model\.(pt|joblib)"):
         load_flash_scorer_from_run(run_dir, model_mode="flash_scorer")
 
     empty = tmp_path / "empty_run"
