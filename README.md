@@ -129,6 +129,9 @@ compare_runs(run_dirs)
 
 ```bash
 poetry install
+# optional GNN / viz stack (historical notebooks):
+# poetry install -E all
+# or: pip install -e ".[gnn,viz]"
 # or: pip install -e .
 
 # smoke (synthetic data, no Samara/BCI files required)
@@ -154,12 +157,15 @@ print(run.metrics)
 
 ### Colab
 
-```python
-!pip install -q "git+https://github.com/Sidl419/pattern_recognition.git"
-# or: %cd /content/drive/MyDrive/pattern_recognition && !pip install -q -e .
+Colab uses **Python 3.12**. Core install accepts Colab’s Torch and NumPy 2.x — one command:
 
+```python
 from google.colab import drive
 drive.mount("/content/drive")
+
+%cd /content/drive/MyDrive/pattern_recognition
+!pip install -q -e .
+# or: !pip install -q "git+https://github.com/Sidl419/pattern_recognition.git"
 
 from pattern_recognition.experiment import run_experiment
 
@@ -195,7 +201,7 @@ config = {
 run_dir = run_experiment(config)
 ```
 
-Point `data.params.path` / `output_dir` at Drive mounts. Use `"device": "cuda"` on GPU runtimes (hard-fails if no GPU); `"auto"` is fine too. See the Colab section in the example notebook for mount / compare cells.
+Point `data.params.path` / `output_dir` at Drive mounts. Use `"device": "cuda"` on GPU runtimes (hard-fails if no GPU); `"auto"` is fine too. See [`notebooks/examples/samara_speller_compare_colab.ipynb`](notebooks/examples/samara_speller_compare_colab.ipynb) for the five-model compare flow. GNN notebooks need `pip install -e ".[gnn,viz]"`.
 
 ## Repo map
 

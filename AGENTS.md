@@ -36,6 +36,7 @@ Installable package: `pattern_recognition` (Poetry). Design: `docs/superpowers/s
 
 ```bash
 poetry install
+# optional GNN/viz: poetry install -E all
 make test          # or: poetry run pytest tests/ -q
 make format        # Ruff format pattern_recognition + tests
 make check         # format-check + lint + test

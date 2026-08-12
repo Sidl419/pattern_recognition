@@ -4,9 +4,10 @@
 name = "aggdraw"
 version = "1.3.19"
 description = "High quality drawing interface for PIL."
-optional = false
+optional = true
 python-versions = ">=3.9"
 groups = ["main"]
+markers = "extra == \"viz\" or extra == \"all\""
 files = [
     {file = "aggdraw-1.3.19-cp310-cp310-macosx_14_0_arm64.whl", hash = "sha256:cfbb072ee0a6de6cb6a782724df6e8ab9648d9566fb033118dcebbe9dc06326e"},
     {file = "aggdraw-1.3.19-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:789fc905d0bad232fe4d783ee115ed34a1c0904957dc384fc5c45a40df517975"},
@@ -95,9 +96,10 @@ files = [
 name = "captum"
 version = "0.6.0"
 description = "Model interpretability for PyTorch"
-optional = false
+optional = true
 python-versions = ">=3.6"
 groups = ["main"]
+markers = "extra == \"gnn\" or extra == \"all\""
 files = [
     {file = "captum-0.6.0-py3-none-any.whl", hash = "sha256:6b157d6c625cc365c5f9630f1380fbb283194001dd77c0f7c07c827bdbe58661"},
     {file = "captum-0.6.0.tar.gz", hash = "sha256:01bb374622d46b56acd590462757bf2087ed3721dcebf4922db0fa77548d6524"},
@@ -330,7 +332,7 @@ files = [
     {file = "colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"},
     {file = "colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44"},
 ]
-markers = {main = "sys_platform == \"win32\" or platform_system == \"Windows\"", dev = "sys_platform == \"win32\""}
+markers = {main = "platform_system == \"Windows\" or sys_platform == \"win32\"", dev = "sys_platform == \"win32\""}
 
 [[package]]
 name = "comm"
@@ -570,9 +572,10 @@ woff = ["brotli (>=1.0.1) ; platform_python_implementation == \"CPython\"", "bro
 name = "graphviz"
 version = "0.21"
 description = "Simple Python interface for Graphviz"
-optional = false
+optional = true
 python-versions = ">=3.9"
 groups = ["main"]
+markers = "extra == \"viz\" or extra == \"all\""
 files = [
     {file = "graphviz-0.21-py3-none-any.whl", hash = "sha256:54f33de9f4f911d7e84e4191749cac8cc5653f815b06738c54db9a15ab8b1e42"},
     {file = "graphviz-0.21.tar.gz", hash = "sha256:20743e7183be82aaaa8ad6c93f8893c923bd6658a04c32ee115edb3c8a835f78"},
@@ -1006,9 +1009,10 @@ traitlets = "*"
 name = "ml-dtypes"
 version = "0.5.3"
 description = "ml_dtypes is a stand-alone implementation of several NumPy dtype extensions used in machine learning."
-optional = false
+optional = true
 python-versions = ">=3.9"
 groups = ["main"]
+markers = "extra == \"viz\" or extra == \"all\""
 files = [
     {file = "ml_dtypes-0.5.3-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:0a1d68a7cb53e3f640b2b6a34d12c0542da3dd935e560fdf463c0c77f339fc20"},
     {file = "ml_dtypes-0.5.3-cp310-cp310-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:0cd5a6c711b5350f3cbc2ac28def81cd1c580075ccb7955e61e9d8f4bfd40d24"},
@@ -1049,7 +1053,8 @@ files = [
 
 [package.dependencies]
 numpy = [
-    {version = ">=1.23.3", markers = "python_version >= \"3.11\""},
+    {version = ">=1.26.0", markers = "python_version >= \"3.12\""},
+    {version = ">=1.23.3", markers = "python_version == \"3.11\""},
     {version = ">=1.21.2", markers = "python_version >= \"3.10\""},
 ]
 
@@ -1363,9 +1368,10 @@ wheel = "*"
 name = "onnx"
 version = "1.18.0"
 description = "Open Neural Network Exchange"
-optional = false
+optional = true
 python-versions = ">=3.9"
 groups = ["main"]
+markers = "extra == \"viz\" or extra == \"all\""
 files = [
     {file = "onnx-1.18.0-cp310-cp310-macosx_12_0_universal2.whl", hash = "sha256:4a3b50d94620e2c7c1404d1d59bc53e665883ae3fecbd856cc86da0639fd0fc3"},
     {file = "onnx-1.18.0-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e189652dad6e70a0465035c55cc565c27aa38803dd4f4e74e4b952ee1c2de94b"},
@@ -1412,9 +1418,10 @@ reference = ["Pillow", "google-re2 ; python_version < \"3.13\""]
 name = "onnx-ir"
 version = "0.1.6"
 description = "Efficient in-memory representation for ONNX"
-optional = false
+optional = true
 python-versions = ">=3.9"
 groups = ["main"]
+markers = "extra == \"viz\" or extra == \"all\""
 files = [
     {file = "onnx_ir-0.1.6-py3-none-any.whl", hash = "sha256:ad2e99caf8dcce6f2c1262dbdaf5f51ae23a530bcedb17a273d743685ebc45cf"},
     {file = "onnx_ir-0.1.6.tar.gz", hash = "sha256:2ad6b7561703ae777af2a1a3fe5e8292a9283b9820ef75bd4c5eed3d586a5e10"},
@@ -1430,9 +1437,10 @@ typing_extensions = ">=4.10"
 name = "onnxscript"
 version = "0.3.2"
 description = "Naturally author ONNX functions and models using a subset of Python"
-optional = false
+optional = true
 python-versions = ">=3.9"
 groups = ["main"]
+markers = "extra == \"viz\" or extra == \"all\""
 files = [
     {file = "onnxscript-0.3.2-py3-none-any.whl", hash = "sha256:220bbecccae228a285bd385159c47a09f003c623c9636afd56cc91df50706a88"},
     {file = "onnxscript-0.3.2.tar.gz", hash = "sha256:60820d4c3e39f8ea7d945dd4f96fa5dd23c3c2e111022512477c52c9e78eb3d4"},
@@ -1713,9 +1721,10 @@ xmp = ["defusedxml"]
 name = "pkg"
 version = "0.2"
 description = "Python scripts dealing with software packages used in building applications and systems"
-optional = false
+optional = true
 python-versions = ">=3.7.3"
 groups = ["main"]
+markers = "extra == \"viz\" or extra == \"all\""
 files = [
     {file = "pkg-0.2-py3-none-any.whl", hash = "sha256:88849f47c7c4f5242f7190da896133613229ff17198c84d463b0ad8d458363f0"},
     {file = "pkg-0.2.tar.gz", hash = "sha256:809e0221e41be4619ae412f56826e5a87c616abf9168838b170ead5db4a4118e"},
@@ -1794,9 +1803,10 @@ wcwidth = "*"
 name = "protobuf"
 version = "6.32.0"
 description = ""
-optional = false
+optional = true
 python-versions = ">=3.9"
 groups = ["main"]
+markers = "extra == \"viz\" or extra == \"all\""
 files = [
     {file = "protobuf-6.32.0-cp310-abi3-win32.whl", hash = "sha256:84f9e3c1ff6fb0308dbacb0950d8aa90694b0d0ee68e75719cb044b7078fe741"},
     {file = "protobuf-6.32.0-cp310-abi3-win_amd64.whl", hash = "sha256:a8bdbb2f009cfc22a36d031f22a625a38b615b5e19e558a7b756b3279723e68e"},
@@ -2120,7 +2130,7 @@ description = "Python for Window Extensions"
 optional = false
 python-versions = "*"
 groups = ["main"]
-markers = "platform_python_implementation != \"PyPy\" and sys_platform == \"win32\""
+markers = "sys_platform == \"win32\" and platform_python_implementation != \"PyPy\""
 files = [
     {file = "pywin32-306-cp310-cp310-win32.whl", hash = "sha256:06d3420a5155ba65f0b72f2699b5bacf3109f36acbe8923765c22938a69dfc8d"},
     {file = "pywin32-306-cp310-cp310-win_amd64.whl", hash = "sha256:84f4471dbca1887ea3803d8848a1616429ac94a4a8d05f4bc9c5dcfd42ca99c8"},
@@ -2393,7 +2403,7 @@ description = "Fundamental algorithms for scientific computing in Python"
 optional = false
 python-versions = ">=3.11"
 groups = ["main"]
-markers = "python_version == \"3.11\""
+markers = "python_version >= \"3.11\""
 files = [
     {file = "scipy-1.16.3-cp311-cp311-macosx_10_14_x86_64.whl", hash = "sha256:40be6cf99e68b6c4321e9f8782e7d5ff8265af28ef2cd56e9c9b2638fa08ad97"},
     {file = "scipy-1.16.3-cp311-cp311-macosx_12_0_arm64.whl", hash = "sha256:8be1ca9170fcb6223cc7c27f4305d680ded114a1567c0bd2bfcbf947d1b17511"},
@@ -2739,9 +2749,10 @@ opt-einsum = ["opt-einsum (>=3.3)"]
 name = "torch-geometric"
 version = "2.3.0"
 description = "Graph Neural Network Library for PyTorch"
-optional = false
+optional = true
 python-versions = ">=3.7"
 groups = ["main"]
+markers = "extra == \"gnn\" or extra == \"all\""
 files = [
     {file = "torch_geometric-2.3.0.tar.gz", hash = "sha256:4b44965d1d1f12ec2656d896614c9e8de11c096c5ff0dc7661b54b498fa3f766"},
 ]
@@ -2768,9 +2779,10 @@ test = ["onnx", "onnxruntime", "pytest", "pytest-cov"]
 name = "torchviz"
 version = "0.0.3"
 description = "A small package to create visualizations of PyTorch execution graphs"
-optional = false
+optional = true
 python-versions = "*"
 groups = ["main"]
+markers = "extra == \"viz\" or extra == \"all\""
 files = [
     {file = "torchviz-0.0.3-py3-none-any.whl", hash = "sha256:5eab98d17cbe8a54727cfa6a527681cff613430fff8fc68f52302ca5fa26cdf1"},
     {file = "torchviz-0.0.3.tar.gz", hash = "sha256:2e95f2fea7a31ec9549f2d6bbf446d75aeb6a9880fcf13e7dd843fdcdb4a3725"},
@@ -2917,9 +2929,10 @@ socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 name = "visualtorch"
 version = "0.2.4"
 description = "Architecture visualization of Torch models"
-optional = false
+optional = true
 python-versions = ">=3.10"
 groups = ["main"]
+markers = "extra == \"viz\" or extra == \"all\""
 files = [
     {file = "visualtorch-0.2.4-py3-none-any.whl", hash = "sha256:b84e9115204d3a4d1c2d054f85cdcc7ae0e154ece18340622e6ea832736c442c"},
     {file = "visualtorch-0.2.4.tar.gz", hash = "sha256:662e32040533cbbf389cfd12e0a95799f0cf16612bac5eea149e6028bbb36812"},
@@ -2962,7 +2975,12 @@ files = [
 [package.extras]
 test = ["pytest (>=6.0.0)", "setuptools (>=65)"]
 
+[extras]
+all = ["captum", "onnx", "onnxscript", "pkg", "torch-geometric", "torchviz", "visualtorch"]
+gnn = ["captum", "torch-geometric"]
+viz = ["onnx", "onnxscript", "pkg", "torchviz", "visualtorch"]
+
 [metadata]
 lock-version = "2.1"
-python-versions = ">=3.10,<3.12"
-content-hash = "fb6ab1afec8bf9ec3d6922cb80f984c02267dd0615d0507a7b8c6696aea6dc88"
+python-versions = ">=3.10,<3.13"
+content-hash = "8fe110640383efdb3d208f7ae285b56db4edb8cd9bd4a85f355d08424d8eff9f"
