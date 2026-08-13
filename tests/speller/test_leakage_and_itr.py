@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import pytest
+from pattern_recognition.selections.protocols import get_protocol
 from pattern_recognition.speller.benchmark import (
     OracleFlashScorer,
     _per_subject_rows,
     run_speller_benchmark,
 )
 from pattern_recognition.speller.metrics import _itr_bits_per_min, selection_duration_s
-from pattern_recognition.speller.protocols import get_protocol
 
 from tests.speller.helpers import stub_binary_run
 
@@ -38,7 +38,7 @@ def test_per_subject_itr_uses_subject_char_acc():
 
 
 def test_allow_train_pool_eval_uses_all_epoch_indices(monkeypatch, tmp_path):
-    from pattern_recognition.speller import data_loading as dl
+    from pattern_recognition.data import selection_loading as dl
 
     captured: dict = {}
 

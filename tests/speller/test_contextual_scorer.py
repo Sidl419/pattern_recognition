@@ -1,11 +1,11 @@
 import numpy as np
 import pytest
 from pattern_recognition.experiment import run_experiment
+from pattern_recognition.selections.types import Selection
 from pattern_recognition.speller.benchmark import (
     ContextualFlashScorer,
     load_flash_scorer_from_run,
 )
-from pattern_recognition.speller.types import Selection
 
 from tests.speller.helpers import synthetic_sequence_experiment_config
 
@@ -87,9 +87,9 @@ def test_contextual_prefix_r_scores_differ_from_full_context(ct_run_dir):
 
 def test_evaluate_selections_calls_score_fn_per_r():
     """score_fn path re-scores at each r (no CT train — contract is the loop)."""
-    from pattern_recognition.speller.grids import BCI3_GRID
+    from pattern_recognition.selections.grids import BCI3_GRID
+    from pattern_recognition.selections.protocols import get_protocol
     from pattern_recognition.speller.metrics import evaluate_selections
-    from pattern_recognition.speller.protocols import get_protocol
 
     selection = _two_repeat_selection(np.random.default_rng(1))
     protocol = get_protocol("bci3_rowcol")

@@ -11,7 +11,7 @@ from sklearn.metrics import (
 )
 
 from pattern_recognition.models.classical import SklearnSVM
-from pattern_recognition.training.metrics import compute_itr
+from pattern_recognition.training.metrics import brier_score, compute_itr
 
 
 def dataset_to_xy(dataset: Any) -> tuple[np.ndarray, np.ndarray]:
@@ -45,12 +45,22 @@ def train_svm(
     bacc = float(balanced_accuracy_score(y_va, y_hat))
     f1 = float(f1_score(y_va, y_hat, zero_division=0))
     itr = float(compute_itr(acc, n_classes=2))
+    if model.svc_kwargs.get("probability", False):
+        p_pos = np.clip(np.asarray(scores, dtype=float), 0.0, 1.0)
+    else:
+        # Decision-function margins are not probabilities; squash to make the
+        # Brier score meaningful rather than unbounded.
+        p_pos = 1.0 / (1.0 + np.exp(-np.asarray(scores, dtype=float)))
+    probs = np.column_stack([1.0 - p_pos, p_pos])
+    onehot = np.column_stack([1.0 - y_va, y_va]).astype(float)
+    brier = brier_score(probs, onehot)
     elapsed = float(time.time() - started)
     acc_dict = {
         "Accuracy": np.array([acc], dtype=float),
         "Balanced Accuracy": np.array([bacc], dtype=float),
         "F1-score": np.array([f1], dtype=float),
         "ITR": np.array([itr], dtype=float),
+        "Brier": np.array([brier], dtype=float),
     }
     val_loss_history = [float("nan")]
     return val_loss_history, acc_dict, elapsed

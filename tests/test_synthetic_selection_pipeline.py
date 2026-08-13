@@ -1,6 +1,6 @@
 import pytest
 from pattern_recognition.data.pipelines import get_pipeline
-from pattern_recognition.speller.packing import collate_selection_packets
+from pattern_recognition.selections.packing import collate_selection_packets
 from torch.utils.data import DataLoader
 
 

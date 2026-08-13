@@ -117,35 +117,6 @@ class CNNMatrixDataset(Dataset):
         return self.tensors[0].size(0)
 
 
-class EEGDataset(Dataset):
-    """
-    TensorDataset with support of transforms.
-    """
-
-    def __init__(self, tensors, with_target=True, transform=None, num_classes=2):
-        assert all(tensors[0].size(0) == tensor.size(0) for tensor in tensors)
-        self.tensors = tensors
-        self.transform = transform
-        self.with_target = with_target
-        self.num_classes = num_classes
-
-    def __getitem__(self, index):
-        x = self.tensors[0][index]
-
-        if self.transform:
-            x = self.transform(x)
-
-        if self.with_target:
-            y = self.tensors[1][index]
-            # y = (torch.arange(0, self.num_classes) == y).float()
-            return x, y.unsqueeze(0).float()
-        else:
-            return x
-
-    def __len__(self):
-        return self.tensors[0].size(0)
-
-
 class SelectionPacketDataset(Dataset):
     """Dataset of packed selection packets (dict of CPU tensors)."""
 

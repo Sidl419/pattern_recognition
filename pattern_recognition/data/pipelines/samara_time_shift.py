@@ -11,10 +11,11 @@ from sklearn.model_selection import train_test_split
 from pattern_recognition.data.datasets import CNNMatrixDataset
 from pattern_recognition.data.pipelines.base import DatasetBundle
 from pattern_recognition.data.pipelines.registry import register_pipeline
+from pattern_recognition.data.samara import load_samara_subjects
+from pattern_recognition.data.splits import subject_seed
 from pattern_recognition.data.time_shift import (
     build_timeshifted_dataset,
     build_timeshifted_dataset_sc,
-    load_p300_subjects,
 )
 
 
@@ -74,26 +75,13 @@ class SamaraTimeShift:
         self.subject = subject
 
     def build(self) -> DatasetBundle:
-        resolved = Path(self.path).expanduser().resolve()
-        if not resolved.is_dir():
-            raise FileNotFoundError(f"Samara data path not found: {resolved}")
-
-        data, labels = load_p300_subjects(
-            str(resolved),
+        data, labels, subjects = load_samara_subjects(
+            self.path,
             channel_idx=self.channel_idx,
-            standardize=True,
             file_pattern=self.file_pattern,
+            subject=self.subject,
         )
-        if not data:
-            raise FileNotFoundError(
-                f"No files matching {self.file_pattern!r} under {resolved}"
-            )
-
-        subjects = sorted(data.keys())
-        if self.subject is not None:
-            if self.subject not in data:
-                raise KeyError(f"Subject {self.subject!r} not in loaded set {subjects}")
-            subjects = [self.subject]
+        resolved = Path(self.path).expanduser().resolve()
 
         builder = (
             build_timeshifted_dataset_sc
@@ -106,7 +94,7 @@ class SamaraTimeShift:
         val_X_parts: list[torch.Tensor] = []
         val_y_parts: list[torch.Tensor] = []
 
-        for i, subj in enumerate(subjects):
+        for subj in subjects:
             x = np.asarray(data[subj], dtype=np.float32)
             y = np.asarray(labels[subj], dtype=np.int64)
             x_tr, x_va, y_tr, y_va = train_test_split(
@@ -114,7 +102,7 @@ class SamaraTimeShift:
                 y,
                 test_size=self.val_fraction,
                 shuffle=True,
-                random_state=self.seed + i,
+                random_state=subject_seed(self.seed, subj),
                 stratify=y if len(np.unique(y)) > 1 else None,
             )
 

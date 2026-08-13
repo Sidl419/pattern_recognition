@@ -21,7 +21,14 @@ def test_sequence_model_rejects_non_packet_pipeline(tmp_path):
         run_experiment(cfg)
 
 
-def test_binary_model_rejects_selection_packet_pipeline(tmp_path):
+@pytest.mark.parametrize(
+    ("model_name", "params"),
+    [
+        ("BaseCNN", {"input_feat_dim": 64, "n_channels": 1}),
+        ("SVM", {"C": 1.0, "kernel": "linear"}),
+    ],
+)
+def test_binary_model_rejects_selection_packet_pipeline(tmp_path, model_name, params):
     cfg = {
         "name": "bin_packet_mismatch",
         "seed": 0,
@@ -37,10 +44,7 @@ def test_binary_model_rejects_selection_packet_pipeline(tmp_path):
                 "r_max": 2,
             },
         },
-        "model": {
-            "name": "BaseCNN",
-            "params": {"input_feat_dim": 64, "n_channels": 1},
-        },
+        "model": {"name": model_name, "params": params},
         "train": {
             "lr": 1e-3,
             "weight_decay": 0.0,
@@ -68,6 +72,9 @@ def test_contextual_transformer_smoke_run(tmp_path):
     metrics = json.loads((run_dir / "metrics.json").read_text())
     assert "accuracy" in metrics
     assert np.isfinite(metrics["accuracy"])
+    assert np.isfinite(metrics["brier"])
+    assert 0.0 <= metrics["brier"] <= 2.0
+    assert metrics["checkpoint_metric"] == "brier"
 
 
 def test_sequence_classifier_smoke_run(tmp_path):
@@ -81,8 +88,11 @@ def test_sequence_classifier_smoke_run(tmp_path):
     assert (run_dir / "model.pt").is_file()
     metrics = json.loads((run_dir / "metrics.json").read_text())
     assert np.isfinite(metrics["accuracy"])
+    assert np.isfinite(metrics["brier"])
+    assert 0.0 <= metrics["brier"] <= 2.0
     assert math.isnan(metrics["balanced_accuracy"])
     assert math.isnan(metrics["f1"])
+    assert metrics["checkpoint_metric"] == "brier"
     history = np.load(run_dir / "history.npz")
     assert history["balanced_accuracy"].shape[0] >= 1
     assert math.isnan(float(history["balanced_accuracy"][-1]))

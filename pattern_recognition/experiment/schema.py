@@ -23,16 +23,22 @@ class SplitConfig(BaseModel):
 
 
 class DataConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     pipeline: str
     params: dict[str, Any] = Field(default_factory=dict)
 
 
 class ModelConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str
     params: dict[str, Any] = Field(default_factory=dict)
 
 
 class TrainConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     lr: float
     weight_decay: float
     batch_size: int
@@ -40,9 +46,28 @@ class TrainConfig(BaseModel):
     step_size: int
     gamma: float
     save_model: bool = True
+    #: Which validation epoch to keep and report. Defaults to the Brier score
+    #: because it is the only one of these that keeps ranking epochs while a
+    #: P300 model still predicts all-negative: accuracy then sits at the
+    #: majority rate and balanced accuracy at exactly 0.5, so both go flat.
+    #: Brier also matches the training objective. ``last`` restores the old
+    #: final-epoch behaviour. ``SequenceClassifier`` reports selection accuracy
+    #: only, so balanced accuracy / F1 resolve to ``accuracy`` there (recorded
+    #: in ``run_meta.checkpoint_metric``).
+    checkpoint_metric: Literal[
+        "balanced_accuracy", "accuracy", "f1", "brier", "val_loss", "last"
+    ] = "brier"
 
 
 class ExperimentConfig(BaseModel):
+    """Top-level experiment config.
+
+    ``extra="forbid"`` throughout: a misspelled or misplaced key is a silent
+    change of experiment, which is worse than a failed run.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
     name: str
     seed: int = 42
     device: str = "auto"

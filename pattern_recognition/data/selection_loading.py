@@ -1,4 +1,4 @@
-"""Load real EEG into speller ``Selection`` objects (BCI3 ground-truth, Samara sim)."""
+"""Load real EEG into ``Selection`` objects (BCI3 ground-truth, Samara sim)."""
 
 from __future__ import annotations
 
@@ -8,18 +8,16 @@ from typing import Any
 import numpy as np
 import scipy.io as sio
 
-from pattern_recognition.data.bci3_prep import prepare_bci3_pz_flashes
-from pattern_recognition.data.pipelines.bci3_pz import (
+from pattern_recognition.data.bci3_prep import (
     DEFAULT_TEST_A_CHARS,
     DEFAULT_TEST_B_CHARS,
+    prepare_bci3_pz_flashes,
 )
-from pattern_recognition.data.time_shift import load_p300_subjects
-from pattern_recognition.speller.grids import SAMARA_GRID
-from pattern_recognition.speller.simulate import (
-    simulate_samara_selections,
-    stratified_epoch_holdout,
-)
-from pattern_recognition.speller.types import Selection
+from pattern_recognition.data.samara import load_samara_subjects
+from pattern_recognition.data.splits import stratified_epoch_holdout, subject_seed
+from pattern_recognition.selections.grids import SAMARA_GRID
+from pattern_recognition.selections.simulate import simulate_samara_selections
+from pattern_recognition.selections.types import Selection
 
 
 def _repeat_index_from_codes(codes: np.ndarray) -> np.ndarray:
@@ -124,6 +122,38 @@ def build_bci3_selections_from_mat(
     return selections
 
 
+def _eval_idx_from_artifact(
+    eval_indices: dict[str, list[int]],
+    subject: str,
+    n_epochs: int,
+) -> np.ndarray:
+    """Take a subject's holdout epochs from the binary run's ``split_indices``.
+
+    Recomputing the split here instead would silently diverge from training
+    whenever the subject set, ordering, or loader params differ.
+    """
+    if subject not in eval_indices:
+        raise KeyError(
+            f"Subject {subject!r} has no entry in the binary run's "
+            f"split_indices.json (recorded: {sorted(eval_indices)}). The "
+            "speller cannot verify its holdout is disjoint from training."
+        )
+    idx = np.asarray(eval_indices[subject], dtype=np.int64)
+    if idx.size == 0:
+        raise ValueError(
+            f"Binary run recorded an empty eval split for subject {subject!r}; "
+            "re-train with split.epoch_holdout in (0, 1)."
+        )
+    if idx.min() < 0 or idx.max() >= n_epochs:
+        raise ValueError(
+            f"split_indices.json for subject {subject!r} references epoch "
+            f"{int(idx.max())} but only {n_epochs} epochs were loaded. The "
+            "speller must use the same channel_idx / epoch_len / file_pattern "
+            "and the same .mat files as the binary run."
+        )
+    return idx
+
+
 def build_samara_selections_from_dir(
     data_path: str | Path,
     *,
@@ -138,46 +168,49 @@ def build_samara_selections_from_dir(
     subjects: list[str] | None = None,
     simulation_seed: int | None = None,
     use_train_pool: bool = False,
+    eval_indices: dict[str, list[int]] | None = None,
 ) -> list[Selection]:
     """Load Samara epochs and simulate single-flash selections on holdout pools.
+
+    ``eval_indices`` are the per-subject holdout epochs recorded by the binary
+    run (``split_indices.json``) and are the only leakage-free source: the
+    fallback recomputation below reproduces the training split only when the
+    subject set and ordering match exactly.
 
     When ``use_train_pool`` is true (exploratory), every epoch is eligible for
     packing — including epochs that would be in the binary train pool.
     """
-    data_path = Path(data_path).expanduser().resolve()
-    if not data_path.is_dir():
-        raise FileNotFoundError(f"Samara data path not found: {data_path}")
-
-    data, labels = load_p300_subjects(
-        str(data_path),
+    data, labels, subject_ids = load_samara_subjects(
+        data_path,
         channel_idx=channel_idx,
-        standardize=True,
         file_pattern=file_pattern,
+        subjects=subjects,
     )
-    if not data:
-        raise FileNotFoundError(f"No files matching {file_pattern!r} under {data_path}")
-
-    subject_ids = sorted(data.keys())
-    if subjects is not None:
-        missing = [s for s in subjects if s not in data]
-        if missing:
-            raise KeyError(f"Subjects {missing} not in loaded set {subject_ids}")
-        subject_ids = list(subjects)
+    data_path = Path(data_path).expanduser().resolve()
 
     sim_seed = seed if simulation_seed is None else simulation_seed
+    if use_train_pool or epoch_holdout <= 0.0:
+        eval_source = "train_pool"
+    elif eval_indices is not None:
+        eval_source = "split_indices"
+    else:
+        eval_source = "recomputed"
+
     selections: list[Selection] = []
-    for i, subj in enumerate(subject_ids):
+    for subj in subject_ids:
         x = np.asarray(data[subj][:, :epoch_len], dtype=np.float32)
         y = np.asarray(labels[subj], dtype=np.int64)
         # Model / Dataset expect (n, C, T) for CNN scorers.
         epochs = x[:, np.newaxis, :]
         if use_train_pool or epoch_holdout <= 0.0:
             eval_idx = np.arange(len(y))
+        elif eval_indices is not None:
+            eval_idx = _eval_idx_from_artifact(eval_indices, subj, len(y))
         else:
             _, eval_idx = stratified_epoch_holdout(
                 y,
                 epoch_holdout=epoch_holdout,
-                seed=seed + i,
+                seed=subject_seed(seed, subj),
                 stratify=stratify,
             )
         subj_sels = simulate_samara_selections(
@@ -186,7 +219,7 @@ def build_samara_selections_from_dir(
             eval_idx,
             phrase=phrase,
             r_max=r_max,
-            seed=sim_seed + i,
+            seed=subject_seed(sim_seed, subj),
             grid=SAMARA_GRID,
         )
         for sel in subj_sels:
@@ -196,6 +229,7 @@ def build_samara_selections_from_dir(
                 "label_source": "simulated",
                 "data_path": str(data_path),
                 "use_train_pool": use_train_pool,
+                "eval_source": eval_source,
             }
             selections.append(sel)
     return selections

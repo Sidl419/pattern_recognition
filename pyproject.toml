@@ -11,7 +11,8 @@ python = ">=3.10,<3.13"
 # Loose pins so Colab (Py 3.12 + system Torch/NumPy 2.x) can `pip install` in one command.
 torch = ">=2.0.0,<3.0.0"
 numpy = ">=1.24.2,<3"
-mne = "^1.3.1"
+# 1.8+ dropped pkg_resources; keep <2 so Colab can still resolve a current 1.x.
+mne = ">=1.8.0,<2"
 pandas = ">=1.5.3,<3"
 scipy = ">=1.10.1,<2"
 matplotlib = ">=3.7.1,<4"
@@ -33,12 +34,11 @@ torchviz = {version = ">=0.0.3,<1", optional = true}
 visualtorch = {version = ">=0.2.4,<1", optional = true}
 onnx = {version = ">=1.14.0,<2", optional = true}
 onnxscript = {version = ">=0.1.0,<1", optional = true}
-pkg = {version = ">=0.2,<1", optional = true}
 
 [tool.poetry.extras]
 gnn = ["torch-geometric", "captum"]
-viz = ["torchviz", "visualtorch", "onnx", "onnxscript", "pkg"]
-all = ["torch-geometric", "captum", "torchviz", "visualtorch", "onnx", "onnxscript", "pkg"]
+viz = ["torchviz", "visualtorch", "onnx", "onnxscript"]
+all = ["torch-geometric", "captum", "torchviz", "visualtorch", "onnx", "onnxscript"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
@@ -70,7 +70,3 @@ docstring-code-format = true
 [tool.ruff.lint]
 # Start light: style hygiene without forcing a large first-pass rewrite.
 select = ["E4", "E7", "E9", "F", "I"]
-
-[tool.ruff.lint.per-file-ignores]
-# Historical file defines two EEGNet variants; renaming is out of scope for tooling setup.
-"pattern_recognition/models/cnn.py" = ["F811"]

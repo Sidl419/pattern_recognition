@@ -3,15 +3,15 @@
 from pathlib import Path
 
 import pytest
+from pattern_recognition.data.selection_loading import (
+    build_bci3_selections_from_mat,
+    build_samara_selections_from_dir,
+)
+from pattern_recognition.selections.grids import BCI3_GRID, SAMARA_GRID
 from pattern_recognition.speller.benchmark import (
     OracleFlashScorer,
     run_speller_benchmark,
 )
-from pattern_recognition.speller.data_loading import (
-    build_bci3_selections_from_mat,
-    build_samara_selections_from_dir,
-)
-from pattern_recognition.speller.grids import BCI3_GRID, SAMARA_GRID
 
 ROOT = Path(__file__).resolve().parents[2]
 BCI3_TEST = ROOT / "matrix_dataset" / "Subject_A_Test.mat"

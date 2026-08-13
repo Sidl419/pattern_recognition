@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from pattern_recognition.speller.decode import decode_rowcol
-from pattern_recognition.speller.grids import BCI3_GRID
-from pattern_recognition.speller.protocols.base import register_protocol
-from pattern_recognition.speller.types import Selection
+from pattern_recognition.selections.decode import decode_rowcol
+from pattern_recognition.selections.grids import BCI3_GRID
+from pattern_recognition.selections.protocols.base import register_protocol
+from pattern_recognition.selections.types import Selection
 
 _ROW_CODES = tuple(range(7, 13))
 _COL_CODES = tuple(range(1, 7))

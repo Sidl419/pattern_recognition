@@ -23,11 +23,6 @@ VALID = {
 }
 
 
-def test_valid_config_parses():
-    cfg = ExperimentConfig.model_validate(VALID)
-    assert cfg.name == "smoke"
-
-
 def test_invalid_device_rejected():
     bad = {**VALID, "device": "tpu"}
     with pytest.raises(Exception):

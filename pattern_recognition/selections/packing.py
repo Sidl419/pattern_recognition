@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from pattern_recognition.speller.grids import (
+from pattern_recognition.selections.grids import (
     BCI3_GRID,
     CODE_TO_COL,
     CODE_TO_ROW,
@@ -11,7 +11,7 @@ from pattern_recognition.speller.grids import (
     ROW_CODE,
     SAMARA_GRID,
 )
-from pattern_recognition.speller.types import Selection
+from pattern_recognition.selections.types import Selection
 
 PROTOCOLS = frozenset({"bci3_rowcol", "samara_single_flash_sim"})
 

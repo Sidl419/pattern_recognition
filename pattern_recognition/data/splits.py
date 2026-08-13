@@ -2,8 +2,29 @@
 
 from __future__ import annotations
 
+import hashlib
+
 import numpy as np
 from sklearn.model_selection import train_test_split
+
+# Keep seeds well inside sklearn's ``random_state`` range (< 2**32) so callers
+# can still offset them (e.g. ``+ 1000`` for a second stream) without wrapping.
+_SEED_MODULUS = 2**31
+
+
+def subject_seed(base_seed: int, subject: str) -> int:
+    """Derive a per-subject split seed from the subject id, not its position.
+
+    Enumerating subjects and using ``base_seed + i`` makes the split depend on
+    which subjects happen to be loaded: the same subject gets a different
+    split when trained alone versus pooled, and anything recomputing the split
+    later (the speller) silently disagrees with training. Hashing the id keeps
+    a subject's split identical however the cohort is sliced or ordered.
+
+    ``hashlib`` rather than ``hash()`` — the latter is salted per process.
+    """
+    digest = hashlib.blake2b(subject.encode("utf-8"), digest_size=8).digest()
+    return (int(base_seed) + int.from_bytes(digest, "big")) % _SEED_MODULUS
 
 
 def stratified_epoch_holdout(

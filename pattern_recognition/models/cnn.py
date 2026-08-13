@@ -52,17 +52,16 @@ class FlexCNN(nn.Module):
 
         self.classifier_input_size = output_channels * output_feat_dim
         self.classifier = nn.Linear(self.classifier_input_size, num_classes, bias=True)
-        self.sig = nn.Sigmoid()
 
     def forward(self, x):
+        """Return class **logits**; ``BrierLoss`` applies the softmax."""
         x = self.act(self.conv(x))
 
         x = self.body(x)
 
         x = self.hook(torch.flatten(x, 1))
-        x = self.sig(self.classifier(x))
 
-        return x
+        return self.classifier(x)
 
 
 class CecottiCNN(nn.Module):
@@ -83,17 +82,15 @@ class CecottiCNN(nn.Module):
         self.hook = nn.Linear(self.classifier_input_size, 100, bias=True)
         self.classifier = nn.Linear(100, num_classes, bias=True)
 
-        self.sig = nn.Sigmoid()
-
     def forward(self, x):
+        """Return class **logits**; ``BrierLoss`` applies the softmax."""
         x = scaled_tanh(self.conv1(x))
         x = scaled_tanh(self.conv2(x))
 
         x = torch.flatten(x, 1)
         x = self.hook(x)
-        x = self.sig(self.classifier(x))
 
-        return x
+        return self.classifier(x)
 
 
 class BaseCNN(nn.Module):
@@ -112,23 +109,24 @@ class BaseCNN(nn.Module):
         self.linear_channel = nn.Conv1d(
             n_channels, channel_filters, kernel_size=1, bias=True
         )
-        self.conv = nn.Conv1d(channel_filters, 1, kernel_size=time_kernel, padding=6)
+        self.conv = nn.Conv1d(
+            channel_filters, 1, kernel_size=time_kernel, padding=time_kernel // 2
+        )
         self.bn1 = nn.BatchNorm1d(1)
         self.drop1 = nn.Dropout(p=0.5, inplace=False)
 
         self.hook = nn.ReLU(True)
         self.linear_output = nn.Linear(input_feat_dim, num_classes, bias=True)
-        self.sig = nn.Sigmoid()
 
     def forward(self, x):
+        """Return class **logits**; ``BrierLoss`` applies the softmax."""
         x = self.linear_channel(x)
         x = self.conv(x)
         x = self.bn1(x)
         x = torch.flatten(x, 1)
         x = self.hook(x)
-        x = self.sig(self.linear_output(x))
 
-        return x
+        return self.linear_output(x)
 
 
 class PositionalEncoder(nn.Module):
@@ -182,9 +180,9 @@ class BaseCNNAttn(nn.Module):
         self.linear_output = nn.Linear(
             input_feat_dim * num_filters, num_classes, bias=True
         )
-        self.sig = nn.Softmax()
 
     def forward(self, x):
+        """Return class **logits**; ``BrierLoss`` applies the softmax."""
         x = self.linear_channel(x)
         x = self.pos_enc(x)
 
@@ -198,9 +196,8 @@ class BaseCNNAttn(nn.Module):
 
         x = torch.flatten(x, 1)
         x = self.hook(x)
-        x = self.sig(self.linear_output(x))
 
-        return x
+        return self.linear_output(x)
 
 
 class EEGNet(nn.Module):
@@ -265,6 +262,7 @@ class EEGNet(nn.Module):
         return torch.flatten(x, start_dim=1)
 
     def forward(self, x):
+        """Return class **logits**; ``BrierLoss`` applies the softmax."""
         return self.classifier(self.extract_features(x))
 
 

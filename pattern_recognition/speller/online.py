@@ -5,12 +5,12 @@ from typing import Literal
 
 import numpy as np
 
-from pattern_recognition.speller.decode import (
+from pattern_recognition.selections.decode import (
     aggregate_rowcol_scores,
     aggregate_single_flash_scores,
 )
-from pattern_recognition.speller.grids import GridSpec
-from pattern_recognition.speller.types import Selection
+from pattern_recognition.selections.grids import GridSpec
+from pattern_recognition.selections.types import Selection
 
 DecodeMode = Literal["rowcol", "single_flash"]
 

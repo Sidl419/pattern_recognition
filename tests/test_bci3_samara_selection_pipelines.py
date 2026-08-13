@@ -7,8 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 from pattern_recognition.data.pipelines import get_pipeline
-from pattern_recognition.speller.packing import collate_selection_packets
-from pattern_recognition.speller.types import Selection
+from pattern_recognition.selections.packing import collate_selection_packets
+from pattern_recognition.selections.types import Selection
 from torch.utils.data import DataLoader
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -82,8 +82,10 @@ def test_bci3_selection_packets_monkeypatched(monkeypatch, tmp_path):
             return [_fake_bci3_selection("A"), _fake_bci3_selection("B")]
         return [_fake_bci3_selection("C")]
 
+    # Patch where the pipeline looks the name up, not where it is defined.
     monkeypatch.setattr(
-        "pattern_recognition.speller.data_loading.build_bci3_selections_from_mat",
+        "pattern_recognition.data.pipelines.bci3_selection."
+        "build_bci3_selections_from_mat",
         fake_build,
     )
 
@@ -123,7 +125,7 @@ def test_samara_selection_packets_monkeypatched(monkeypatch, tmp_path):
         return {"S0201": epochs}, {"S0201": labels}
 
     monkeypatch.setattr(
-        "pattern_recognition.data.time_shift.load_p300_subjects",
+        "pattern_recognition.data.samara.load_p300_subjects",
         fake_load,
     )
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from pattern_recognition.speller.grids import CODE_TO_COL, CODE_TO_ROW, GridSpec
+from pattern_recognition.selections.grids import CODE_TO_COL, CODE_TO_ROW, GridSpec
 
 _COL_CODES = frozenset(range(1, 7))
 _ROW_CODES = frozenset(range(7, 13))

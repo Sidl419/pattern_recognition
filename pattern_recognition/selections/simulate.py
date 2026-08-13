@@ -2,14 +2,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from pattern_recognition.data.splits import stratified_epoch_holdout
-from pattern_recognition.speller.grids import SAMARA_GRID, GridSpec
-from pattern_recognition.speller.types import Selection
+from pattern_recognition.selections.grids import SAMARA_GRID, GridSpec
+from pattern_recognition.selections.types import Selection
 
-__all__ = [
-    "simulate_samara_selections",
-    "stratified_epoch_holdout",
-]
+__all__ = ["simulate_samara_selections"]
 
 
 def simulate_samara_selections(

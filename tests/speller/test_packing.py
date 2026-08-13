@@ -1,13 +1,13 @@
 import numpy as np
 import torch
-from pattern_recognition.speller.grids import COL_CODE, ROW_CODE
-from pattern_recognition.speller.packing import (
+from pattern_recognition.selections.grids import COL_CODE, ROW_CODE
+from pattern_recognition.selections.packing import (
     collate_selection_packets,
     flash_targets_for_selection,
     pack_selection,
     stimulus_ids_to_model_codes,
 )
-from pattern_recognition.speller.types import Selection
+from pattern_recognition.selections.types import Selection
 
 
 def test_samara_ids_shift_for_model():
@@ -38,7 +38,7 @@ def test_flash_targets_bci3():
 
 
 def test_flash_targets_samara():
-    from pattern_recognition.speller.grids import SAMARA_GRID
+    from pattern_recognition.selections.grids import SAMARA_GRID
 
     char = SAMARA_GRID.chars[3]
     ids = np.array([3, 0, 3, 7], dtype=np.int64)
@@ -54,7 +54,7 @@ def test_flash_targets_samara():
 
 
 def test_pack_selection_filters_by_r_samara():
-    from pattern_recognition.speller.grids import SAMARA_GRID
+    from pattern_recognition.selections.grids import SAMARA_GRID
 
     char = SAMARA_GRID.chars[1]
     n = 32  # 16 cells × 2 repeats

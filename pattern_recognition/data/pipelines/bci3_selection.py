@@ -7,6 +7,8 @@ from pathlib import Path
 from pattern_recognition.data.datasets import SelectionPacketDataset
 from pattern_recognition.data.pipelines.base import DatasetBundle
 from pattern_recognition.data.pipelines.registry import register_pipeline
+from pattern_recognition.data.selection_loading import build_bci3_selections_from_mat
+from pattern_recognition.selections.packing import pack_selection
 
 PROTOCOL = "bci3_rowcol"
 
@@ -15,7 +17,7 @@ PROTOCOL = "bci3_rowcol"
 class BCI3SelectionPackets:
     """Pack BCI3 row×col selections into train/val selection packets.
 
-    Uses :func:`~pattern_recognition.speller.data_loading.build_bci3_selections_from_mat`
+    Uses :func:`~pattern_recognition.data.selection_loading.build_bci3_selections_from_mat`
     (same flash prep as the speller). Train chars come from ``train_mat``; val
     from ``test_mat`` when provided, otherwise a holdout fraction of train.
     """
@@ -86,12 +88,6 @@ class BCI3SelectionPackets:
         return kwargs
 
     def build(self) -> DatasetBundle:
-        # Lazy: data_loading / packing pull in speller package init.
-        from pattern_recognition.speller.data_loading import (
-            build_bci3_selections_from_mat,
-        )
-        from pattern_recognition.speller.packing import pack_selection
-
         train_path = Path(self.train_mat).expanduser().resolve()
         if not train_path.is_file():
             raise FileNotFoundError(f"BCI3 train .mat not found: {train_path}")

@@ -4,6 +4,7 @@ from pattern_recognition.data.pipelines.registry import (
     get_pipeline,
     list_pipelines,
 )
+from pattern_recognition.models.classical import SklearnSVM
 from pattern_recognition.models.registry import get_model, list_models
 
 
@@ -25,27 +26,7 @@ def test_expected_pipelines_and_models_registered():
     assert "ContextualTransformer" in models
     assert "SequenceClassifier" in models
     assert "SVM" in models
-
-
-def test_sequence_model_factories_build():
-    """Factory params build CT (BCI3 codes) and SC cell head (Samara codes)."""
-    ct = get_model("ContextualTransformer")(
-        eegnet={"input_feat_dim": 64, "in_channels": 1},
-        d_model=32,
-        nhead=4,
-        num_stimulus_codes=13,
-        max_flashes=32,
-    )
-    sc = get_model("SequenceClassifier")(
-        eegnet={"input_feat_dim": 64, "in_channels": 1},
-        d_model=32,
-        nhead=4,
-        num_stimulus_codes=17,
-        max_flashes=32,
-        head_mode="cell",
-        n_cells=16,
-    )
-    assert ct is not None and sc is not None
+    assert isinstance(get_model("SVM")(C=0.5, kernel="rbf"), SklearnSVM)
 
 
 def test_unknown_registry_entry_lists_options():

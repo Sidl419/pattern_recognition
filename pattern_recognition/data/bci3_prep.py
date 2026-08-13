@@ -11,6 +11,16 @@ import scipy.io as sio
 from pattern_recognition.data.averaging import standardize_per_sample
 from pattern_recognition.data.p300 import P300Getter
 
+# Published target strings for the BCI III test sets (labels hidden in the
+# .mat files). Kept here rather than in a pipeline module so both the epoch
+# pipeline and selection loading can use them without importing each other.
+DEFAULT_TEST_A_CHARS = list(
+    "WQXPLZCOMRKO97YFZDEZ1DPI9NNVGRQDJCUVRMEUOOOJD2UFYPOO6J7LDGYEGOA5VHNEHBTXOO1TDOILUEE5BFAEEXAW_K4R3MRU"
+)
+DEFAULT_TEST_B_CHARS = list(
+    "MERMIROOMUHJPXJOHUVLEORWRJBTJGGCIFSCGGLFSLEZWNPMPKEZSYSENDWPBDUUJIXZETUZCWOJQQRTVXBMZWHSWPRQDZEQRCOQZ"
+)
+
 
 def _channel_index(eloc, channel_name: str) -> int:
     names = [c.lower().strip(".") for c in eloc.ch_names]

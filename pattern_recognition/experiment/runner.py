@@ -11,12 +11,14 @@ from typing import Any
 
 import numpy as np
 import torch
-from torch import nn
 from torch.utils.data import DataLoader
 
 from pattern_recognition.data.pipelines import get_pipeline
 from pattern_recognition.experiment.schema import ExperimentConfig
+from pattern_recognition.losses import BrierLoss
 from pattern_recognition.models import get_model
+from pattern_recognition.selections.packing import collate_selection_packets
+from pattern_recognition.training.checkpoint import BestCheckpoint
 from pattern_recognition.training.device import resolve_device
 from pattern_recognition.training.loop import train_model
 from pattern_recognition.training.sequence_loop import (
@@ -46,9 +48,18 @@ def _load_config(config: ExperimentConfig | dict | str | Path) -> ExperimentConf
 def _pipeline_params(cfg: ExperimentConfig) -> dict[str, Any]:
     """Merge data.params with shared ``split`` fields the pipeline accepts."""
     params: dict[str, Any] = {**cfg.data.params}
+    explicit_seed = cfg.data.params.get("seed")
     params.setdefault("seed", cfg.seed)
     if cfg.split is None:
         return params
+
+    if explicit_seed is not None and explicit_seed != cfg.split.seed:
+        raise ValueError(
+            f"Conflicting split seeds: data.params.seed={explicit_seed} and "
+            f"split.seed={cfg.split.seed}. Set only one — the split block "
+            "governs how epochs are partitioned and is what the speller "
+            "benchmark checks against."
+        )
 
     pipeline_cls = get_pipeline(cfg.data.pipeline)
     accepted = set(inspect.signature(pipeline_cls.__init__).parameters)
@@ -78,11 +89,35 @@ def _as_float(value: Any) -> float:
     return float(value)
 
 
-def _final_metric(history: np.ndarray | list | torch.Tensor) -> float:
+def _metric_at(history: np.ndarray | list | torch.Tensor, epoch: int) -> float:
+    """Value of a per-epoch history at the selected (best) epoch."""
     arr = np.asarray(history)
     if arr.size == 0:
         return float("nan")
-    return _as_float(arr[-1])
+    index = epoch if 0 <= epoch < arr.size else arr.size - 1
+    return _as_float(arr[index])
+
+
+def _create_run_dir(output_dir: Path, name: str, started_at: datetime) -> Path:
+    """Create a fresh run directory, never reusing an existing one.
+
+    Timestamps are second-resolution, so back-to-back runs of the same config
+    would otherwise land in the same directory and overwrite each other.
+    """
+    timestamp = started_at.strftime("%Y%m%d_%H%M%S")
+    candidate = output_dir / f"{name}_{timestamp}"
+    suffix = 2
+    while True:
+        try:
+            candidate.mkdir(parents=True, exist_ok=False)
+            return candidate
+        except FileExistsError:
+            candidate = output_dir / f"{name}_{timestamp}_{suffix}"
+            suffix += 1
+
+
+def _write_run_meta(run_dir: Path, run_meta: dict[str, Any]) -> None:
+    (run_dir / "run_meta.json").write_text(json.dumps(run_meta, indent=2) + "\n")
 
 
 def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
@@ -115,6 +150,27 @@ def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
     params = _pipeline_params(cfg)
     bundle = pipeline_cls(**params).build()
 
+    # Write the run record before training so a crash or Ctrl-C hours into a
+    # long run still leaves the config and the split behind.
+    run_dir = _create_run_dir(Path(cfg.output_dir), cfg.name, started_at)
+    (run_dir / "config.json").write_text(cfg.model_dump_json(indent=2) + "\n")
+    if bundle.metadata.get("split_indices") is not None:
+        (run_dir / "split_indices.json").write_text(
+            json.dumps(bundle.metadata["split_indices"], indent=2) + "\n"
+        )
+
+    run_meta: dict[str, Any] = {
+        "seed": cfg.seed,
+        "started_at": started_at.isoformat(),
+        "finished_at": None,
+        "device_requested": device_requested,
+        "device_resolved": device_resolved,
+        "name": cfg.name,
+        "model_mode": None,
+        "status": "running",
+    }
+    _write_run_meta(run_dir, run_meta)
+
     learning_params = {
         "lr": cfg.train.lr,
         "weight_decay": cfg.train.weight_decay,
@@ -124,91 +180,98 @@ def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
         "model_type": "CNN",
     }
     model = get_model(cfg.model.name)(**cfg.model.params)
+    checkpoint = BestCheckpoint(cfg.train.checkpoint_metric)
 
-    if is_classical:
-        from pattern_recognition.training.svm_loop import train_svm
+    try:
+        if is_classical:
+            from pattern_recognition.training.svm_loop import train_svm
 
-        val_loss_history, acc_dict, time_elapsed = train_svm(
-            model, bundle.train, bundle.val
-        )
-        model_mode = "flash_scorer"
-    elif is_sequence:
-        # Lazy: avoid importing speller package at module load (circular risk).
-        from pattern_recognition.speller.packing import collate_selection_packets
-
-        dataloaders = {
-            "train": DataLoader(
-                bundle.train,
-                batch_size=cfg.train.batch_size,
-                shuffle=True,
-                collate_fn=collate_selection_packets,
-            ),
-            "val": DataLoader(
-                bundle.val,
-                batch_size=cfg.train.batch_size,
-                shuffle=False,
-                collate_fn=collate_selection_packets,
-            ),
-        }
-        if cfg.model.name == "ContextualTransformer":
-            val_loss_history, acc_dict, time_elapsed = train_contextual_transformer(
-                model, dataloaders, learning_params, device=device
+            val_loss_history, acc_dict, time_elapsed = train_svm(
+                model, bundle.train, bundle.val
             )
             model_mode = "flash_scorer"
+        elif is_sequence:
+            dataloaders = {
+                "train": DataLoader(
+                    bundle.train,
+                    batch_size=cfg.train.batch_size,
+                    shuffle=True,
+                    collate_fn=collate_selection_packets,
+                ),
+                "val": DataLoader(
+                    bundle.val,
+                    batch_size=cfg.train.batch_size,
+                    shuffle=False,
+                    collate_fn=collate_selection_packets,
+                ),
+            }
+            if cfg.model.name == "ContextualTransformer":
+                val_loss_history, acc_dict, time_elapsed = train_contextual_transformer(
+                    model,
+                    dataloaders,
+                    learning_params,
+                    device=device,
+                    checkpoint=checkpoint,
+                )
+                model_mode = "flash_scorer"
+            else:
+                val_loss_history, acc_dict, time_elapsed = train_sequence_classifier(
+                    model,
+                    dataloaders,
+                    learning_params,
+                    device=device,
+                    checkpoint=checkpoint,
+                )
+                model_mode = "selection_classifier"
         else:
-            val_loss_history, acc_dict, time_elapsed = train_sequence_classifier(
-                model, dataloaders, learning_params, device=device
+            dataloaders = {
+                "train": DataLoader(
+                    bundle.train, batch_size=cfg.train.batch_size, shuffle=True
+                ),
+                "val": DataLoader(
+                    bundle.val, batch_size=cfg.train.batch_size, shuffle=False
+                ),
+            }
+            criterion = BrierLoss()
+            val_loss_history, acc_dict, time_elapsed = train_model(
+                model,
+                dataloaders,
+                criterion,
+                learning_params,
+                is_binary=True,
+                device=device,
+                checkpoint=checkpoint,
             )
-            model_mode = "selection_classifier"
-    else:
-        dataloaders = {
-            "train": DataLoader(
-                bundle.train, batch_size=cfg.train.batch_size, shuffle=True
-            ),
-            "val": DataLoader(
-                bundle.val, batch_size=cfg.train.batch_size, shuffle=False
-            ),
-        }
-        criterion = nn.MSELoss()
-        val_loss_history, acc_dict, time_elapsed = train_model(
-            model,
-            dataloaders,
-            criterion,
-            learning_params,
-            is_binary=True,
-            device=device,
-        )
-        model_mode = "flash_scorer"
+            model_mode = "flash_scorer"
+    except BaseException as exc:  # includes KeyboardInterrupt on long runs
+        run_meta["status"] = "failed"
+        run_meta["error"] = f"{type(exc).__name__}: {exc}"
+        run_meta["finished_at"] = datetime.now(timezone.utc).isoformat()
+        _write_run_meta(run_dir, run_meta)
+        raise
 
-    timestamp = started_at.strftime("%Y%m%d_%H%M%S")
-    run_dir = Path(cfg.output_dir) / f"{cfg.name}_{timestamp}"
-    run_dir.mkdir(parents=True, exist_ok=True)
+    # Classical training has no epochs; everything else reports (and saved)
+    # the epoch the checkpoint tracker selected.
+    best_epoch = 0 if is_classical else checkpoint.best_epoch
+    checkpoint_metric = "last" if is_classical else checkpoint.metric
 
-    (run_dir / "config.json").write_text(cfg.model_dump_json(indent=2) + "\n")
-
-    if bundle.metadata.get("split_indices") is not None:
-        (run_dir / "split_indices.json").write_text(
-            json.dumps(bundle.metadata["split_indices"], indent=2) + "\n"
-        )
-
-    finished_at = datetime.now(timezone.utc)
-    run_meta = {
-        "seed": cfg.seed,
-        "started_at": started_at.isoformat(),
-        "finished_at": finished_at.isoformat(),
-        "device_requested": device_requested,
-        "device_resolved": device_resolved,
-        "name": cfg.name,
-        "model_mode": model_mode,
-    }
-    (run_dir / "run_meta.json").write_text(json.dumps(run_meta, indent=2) + "\n")
+    run_meta["model_mode"] = model_mode
+    run_meta["status"] = "completed"
+    run_meta["checkpoint_metric"] = checkpoint_metric
+    run_meta["checkpoint_metric_requested"] = cfg.train.checkpoint_metric
+    run_meta["best_epoch"] = int(best_epoch)
+    run_meta["finished_at"] = datetime.now(timezone.utc).isoformat()
+    _write_run_meta(run_dir, run_meta)
 
     metrics = {
-        "accuracy": _final_metric(acc_dict["Accuracy"]),
-        "balanced_accuracy": _final_metric(acc_dict["Balanced Accuracy"]),
-        "f1": _final_metric(acc_dict["F1-score"]),
-        "itr": _final_metric(acc_dict["ITR"]),
+        "accuracy": _metric_at(acc_dict["Accuracy"], best_epoch),
+        "balanced_accuracy": _metric_at(acc_dict["Balanced Accuracy"], best_epoch),
+        "f1": _metric_at(acc_dict["F1-score"], best_epoch),
+        "itr": _metric_at(acc_dict["ITR"], best_epoch),
+        "brier": _metric_at(acc_dict["Brier"], best_epoch),
         "train_time_sec": float(time_elapsed),
+        "best_epoch": int(best_epoch),
+        "checkpoint_metric": checkpoint_metric,
         "device_requested": device_requested,
         "device_resolved": device_resolved,
     }
@@ -220,6 +283,7 @@ def run_experiment(config: ExperimentConfig | dict | str | Path) -> Path:
         "balanced_accuracy": np.asarray(acc_dict["Balanced Accuracy"], dtype=float),
         "f1": np.asarray(acc_dict["F1-score"], dtype=float),
         "itr": np.asarray(acc_dict["ITR"], dtype=float),
+        "brier": np.asarray(acc_dict["Brier"], dtype=float),
     }
     np.savez(run_dir / "history.npz", **history_arrays)
 

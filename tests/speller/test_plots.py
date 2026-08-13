@@ -16,11 +16,11 @@ from pattern_recognition.reporting import (
     resolve_speller_tag_dir,
     save_speller_plots,
 )
+from pattern_recognition.selections.protocols import get_protocol
 from pattern_recognition.speller.benchmark import (
     OracleFlashScorer,
     run_speller_benchmark,
 )
-from pattern_recognition.speller.protocols import get_protocol
 
 from tests.speller.helpers import (
     samara_smoke_config,

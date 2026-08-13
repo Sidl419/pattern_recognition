@@ -7,11 +7,13 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from pattern_recognition.data.splits import three_way_epoch_split
+from pattern_recognition.data.splits import (
+    stratified_epoch_holdout,
+    three_way_epoch_split,
+)
 from pattern_recognition.experiment.schema import ExperimentConfig, SplitConfig
 from pattern_recognition.speller.benchmark import run_speller_benchmark
 from pattern_recognition.speller.schema import SplitConfig as SpellerSplitConfig
-from pattern_recognition.speller.simulate import stratified_epoch_holdout
 
 VALID_EXPERIMENT = {
     "name": "smoke",
@@ -110,19 +112,16 @@ def test_shared_split_train_eval_indices_disjoint():
         seed=seed,
         stratify=True,
     )
-    _, speller_eval = stratified_epoch_holdout(y, 0.3, seed=seed, stratify=True)
-    assert set(eval_idx.tolist()) == set(speller_eval.tolist())
     train_pool = set(train_idx.tolist()) | set(val_idx.tolist())
-    assert train_pool.isdisjoint(set(speller_eval.tolist()))
 
-    from pattern_recognition.speller.simulate import simulate_samara_selections
+    from pattern_recognition.selections.simulate import simulate_samara_selections
 
     selections = simulate_samara_selections(
-        epochs, y, speller_eval, phrase="JU", r_max=2, seed=1
+        epochs, y, eval_idx, phrase="JU", r_max=2, seed=1
     )
     used = {i for sel in selections for i in sel.meta["epoch_indices"]}
     assert used.isdisjoint(train_pool)
-    assert used.issubset(set(speller_eval.tolist()))
+    assert used.issubset(set(eval_idx.tolist()))
 
 
 @pytest.mark.parametrize(

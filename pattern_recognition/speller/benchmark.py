@@ -14,23 +14,24 @@ import numpy as np
 import torch
 
 import pattern_recognition.models  # noqa: F401 — register models
-import pattern_recognition.speller.protocols  # noqa: F401 — register protocols
+import pattern_recognition.selections.protocols  # noqa: F401 — register protocols
 from pattern_recognition.experiment.schema import ExperimentConfig
 from pattern_recognition.models import get_model
+from pattern_recognition.models.classical import positive_class_scores
 from pattern_recognition.reporting.plots import save_speller_plots
-from pattern_recognition.speller.decode import decode_from_sequence_output
-from pattern_recognition.speller.grids import COL_CODE, ROW_CODE, GridSpec
+from pattern_recognition.selections.decode import decode_from_sequence_output
+from pattern_recognition.selections.grids import COL_CODE, ROW_CODE, GridSpec
+from pattern_recognition.selections.packing import pack_selection
+from pattern_recognition.selections.protocols import get_protocol
+from pattern_recognition.selections.protocols.base import SpellerProtocol
+from pattern_recognition.selections.types import Selection
 from pattern_recognition.speller.metrics import (
     _itr_bits_per_min,
     evaluate_selections,
     selection_duration_s,
 )
 from pattern_recognition.speller.online import DecodeMode
-from pattern_recognition.speller.packing import pack_selection
-from pattern_recognition.speller.protocols import get_protocol
-from pattern_recognition.speller.protocols.base import SpellerProtocol
 from pattern_recognition.speller.schema import SpellerBenchmarkConfig
-from pattern_recognition.speller.types import Selection
 from pattern_recognition.training.device import resolve_device
 
 
@@ -75,12 +76,7 @@ class SklearnFlashScorer:
         if flashes.ndim == 1:
             flashes = flashes[np.newaxis, ...]
         x = flashes.reshape(flashes.shape[0], -1)
-        est = self._estimator
-        if getattr(est, "probability", False) and hasattr(est, "predict_proba"):
-            scores = est.predict_proba(x)[:, 1]
-        else:
-            scores = est.decision_function(x)
-        return np.asarray(scores, dtype=np.float32)
+        return positive_class_scores(self._estimator, x)
 
 
 class RunFlashScorer:
@@ -416,7 +412,7 @@ def _validate_flash_scorer_input(cfg: SpellerBenchmarkConfig, run_dir: Path) -> 
     """Require single-flash-compatible binary inputs for flash_scorer mode."""
     if cfg.model_mode != "flash_scorer":
         return
-    from pattern_recognition.speller.data_loading import merge_protocol_params
+    from pattern_recognition.data.selection_loading import merge_protocol_params
 
     params = merge_protocol_params(_load_binary_config(run_dir), cfg.protocol_params)
     if params.get("allow_averaged_flash_scorer"):
@@ -437,6 +433,20 @@ def _load_binary_config(run_dir: Path) -> dict:
     if not path.is_file():
         return {}
     return json.loads(path.read_text())
+
+
+def _load_recorded_eval_indices(run_dir: Path) -> dict[str, list[int]] | None:
+    """Read per-subject holdout epochs recorded by the binary run."""
+    path = Path(run_dir) / "split_indices.json"
+    if not path.is_file():
+        return None
+    recorded = json.loads(path.read_text())
+    eval_indices = {
+        subject: splits["eval"]
+        for subject, splits in recorded.items()
+        if splits.get("eval")
+    }
+    return eval_indices or None
 
 
 def _build_synthetic_selections(
@@ -486,7 +496,7 @@ def _build_real_selections(
     protocol: SpellerProtocol,
     run_dir: Path,
 ) -> list[Selection]:
-    from pattern_recognition.speller.data_loading import (
+    from pattern_recognition.data.selection_loading import (
         build_bci3_selections_from_mat,
         build_samara_selections_from_dir,
         merge_protocol_params,
@@ -507,6 +517,7 @@ def _build_real_selections(
                 "For CI-only random flashes set use_synthetic=true."
             )
         use_train_pool = bool(cfg.allow_train_pool_eval)
+        eval_indices = None
         if use_train_pool:
             holdout = 0.0
             seed = (
@@ -518,6 +529,16 @@ def _build_real_selections(
             holdout = cfg.split.epoch_holdout
             seed = cfg.split.seed
             stratify = cfg.split.stratify
+            eval_indices = _load_recorded_eval_indices(run_dir)
+            if eval_indices is None and not cfg.allow_split_mismatch:
+                raise FileNotFoundError(
+                    f"No split_indices.json in {run_dir}. Samara character "
+                    "evaluation needs the binary run's recorded holdout "
+                    "epochs; recomputing the split here can silently reuse "
+                    "training epochs. Re-train with split.epoch_holdout in "
+                    "(0, 1), or set allow_split_mismatch=true / "
+                    "allow_train_pool_eval=true for exploratory runs."
+                )
         subjects = None
         if cfg.subject_mode == "within_subject" and params.get("subject"):
             subjects = [str(params["subject"])]
@@ -536,6 +557,7 @@ def _build_real_selections(
             subjects=subjects,
             simulation_seed=_simulation_seed(cfg),
             use_train_pool=use_train_pool,
+            eval_indices=eval_indices,
         )
 
     # bci3_rowcol
@@ -805,6 +827,7 @@ def run_speller_benchmark(
         "simulation_seed": _simulation_seed(cfg),
         "allow_split_mismatch": cfg.allow_split_mismatch,
         "allow_train_pool_eval": cfg.allow_train_pool_eval,
+        "eval_source": selections[0].meta.get("eval_source") if selections else None,
         "device_requested": device_requested,
         "device_resolved": device_resolved,
         "started_at": started_at.isoformat(),

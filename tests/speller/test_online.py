@@ -1,8 +1,8 @@
 import numpy as np
-from pattern_recognition.speller.decode import decode_single_flash
-from pattern_recognition.speller.grids import SAMARA_GRID
+from pattern_recognition.selections.decode import decode_single_flash
+from pattern_recognition.selections.grids import SAMARA_GRID
+from pattern_recognition.selections.types import Selection
 from pattern_recognition.speller.online import margin_from_scores, online_decode
-from pattern_recognition.speller.types import Selection
 
 
 def test_margin_from_scores_best_minus_second():

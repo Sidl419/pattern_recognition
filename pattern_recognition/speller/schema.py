@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional, Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from pattern_recognition.experiment.schema import SplitConfig
-from pattern_recognition.speller.grids import SAMARA_GRID
+from pattern_recognition.selections.grids import SAMARA_GRID
 
 __all__ = [
     "OnlineConfig",
@@ -20,12 +20,16 @@ __all__ = [
 class SimulationConfig(BaseModel):
     """Samara simulated protocol: phrase packing into selections."""
 
+    model_config = ConfigDict(extra="forbid")
+
     seed: Optional[int] = None
     phrase: str
 
 
 class OnlineConfig(BaseModel):
     """Online decode / early-stop policy."""
+
+    model_config = ConfigDict(extra="forbid")
 
     early_stop: bool = False
     margin_tau: Optional[float] = None
@@ -66,7 +70,12 @@ class SpellerBenchmarkConfig(BaseModel):
     - ``use_synthetic`` defaults to false: selections come from real EEG paths
       in the binary ``run_dir`` config and/or ``protocol_params``. Set
       ``use_synthetic=true`` only for CI / unit smoke (random synthetic flashes).
+    - Unknown keys are rejected: a misspelled ``allow_train_pool_eval`` or
+      ``use_synthetic`` would otherwise silently keep the safe-looking default
+      while the run means something else.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     tag: str
     model_mode: Literal["flash_scorer", "selection_classifier"]

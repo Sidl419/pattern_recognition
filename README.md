@@ -48,6 +48,7 @@ Local collection used for within-/cross-subject P300 work and the simulated sing
 **How the package uses it:**
 
 - Default runner pipelines take **PZ** (`channel_idx=1`) and truncate to **250 samples (0–1 s @ 250 Hz)** for CNN inputs; time-shift pipelines keep the long 500-sample epochs and cut shifted 250-sample windows.
+- Per-subject split seeds are derived from the **subject id** (`data.splits.subject_seed`), not the subject's position in the cohort, so a subject gets the same train/val/eval epochs whether it is trained alone or pooled with the other nine.
 - Labels are binary only (`0` / `1`). There are **no stimulus IDs** in the mats, so character-level Samara evaluation is a **4×4 single-flash simulation** (`label_source: simulated`; default phrase `JUST_DO_IT`, SOA 110 ms).
 - `processed_data/S*_P300_PZ.csv` / `S*_AB_PZ.csv` are optional flattened PZ dumps (~6 770×251: label + 250 samples) for notebook baselines — not required by `run_experiment`.
 
@@ -78,6 +79,10 @@ By default (`use_synthetic: false`) selections come from **real EEG** via binary
 
 Set `use_synthetic: true` only for CI smoke (random flashes).
 
+**Samara holdout comes from the binary run, never recomputed.** The speller reads `split_indices.json` from `run_dir` and evaluates only on the epochs that run held out. A missing `split_indices.json` is a hard error unless you opt out with `allow_split_mismatch` / `allow_train_pool_eval`. Provenance is recorded as `eval_source` (`split_indices` | `recomputed` | `train_pool`) in the speller `meta.json`.
+
+Recomputation (the opt-out path) can still diverge if the loader params differ — `channel_idx`, `epoch_len`, `file_pattern`, or the data directory all change which epochs exist, and indices are positional.
+
 ```bash
 # after a binary run exists under results/<name>_<timestamp>/
 python -m pattern_recognition.speller run \
@@ -102,6 +107,10 @@ Example configs: [`configs/speller_bci3_within.json`](configs/speller_bci3_withi
 
 Runner registers **`SVM`**, **`EEGNet`**, **`BaseCNN`**, **`ContextualTransformer`**, and **`SequenceClassifier`**.
 
+### Training objective
+
+Binary epoch models are trained with `pattern_recognition.losses.BrierLoss` — the Brier score, chosen because it is a proper scoring rule that stays well-behaved under ~1:15 class imbalance. **Binary models emit logits**; the loss applies the softmax itself, so no architecture can silently opt out of being scored properly by forgetting an output activation. The loss reduction averages over samples *and* classes (the standard Brier divided by `n_classes`), matching the scale of the plain `nn.MSELoss()` it replaces so existing learning rates carry over. The sequence models keep their own objectives: masked `BCEWithLogits` with `pos_weight` for `ContextualTransformer`, cross-entropy over the protocol heads for `SequenceClassifier`.
+
 **Three-way P300 comparison** (BCI3 or Samara): train EEGNet on a binary pipeline, CT/SC on `BCI3SelectionPackets` / `SamaraSelectionPackets`, then evaluate with matching speller configs (`flash_scorer` for EEGNet/CT, `selection_classifier` for SC). Stimulus pad index is `0`; BCI3 model codes `1..12` (`num_stimulus_codes=13`), Samara cells `1..16` (`num_stimulus_codes=17`). Samara sequence runs always use `label_source: simulated`. See [`docs/superpowers/specs/2026-08-10-p300-sequence-models-design.md`](docs/superpowers/specs/2026-08-10-p300-sequence-models-design.md).
 
 ## Metrics
@@ -111,8 +120,12 @@ Reported in run `metrics.json` (and comparison tables):
 - **Accuracy** (and CI where used in notebooks)
 - **Balanced accuracy** — important under P300 class imbalance
 - **F1**
+- **Brier score** — multi-category form, `mean_i sum_k (p_ik - o_ik)^2`, range `[0, 2]`, **lower is better**. A proper scoring rule that grades calibrated probabilities instead of the arg-max, so it stays informative under P300 imbalance where accuracy saturates. This is also the training objective (see below)
 - **ITR** (Wolpaw, bits/trial) via `pattern_recognition.training.metrics.compute_itr`
 - **Device fields** — `device_requested` and `device_resolved` in run artifacts
+- **Selection fields** — `best_epoch` and `checkpoint_metric` (which epoch the numbers and the checkpoint come from)
+
+All of the above are validation metrics at `best_epoch`; `history.npz` keeps the full per-epoch curves.
 
 Compare saved runs:
 
@@ -142,7 +155,13 @@ python -m pattern_recognition.experiment run configs/samara_pz_eegnet_sc_n10.jso
 python -m pattern_recognition.experiment run configs/samara_pz_basecnn_sc_n10.json
 ```
 
-Artifacts land under `results/<name>_<timestamp>/` (`config.json`, `run_meta.json`, `metrics.json`, `history.npz`, optional `model.pt` or `model.joblib` for SVM).
+Artifacts land under `results/<name>_<timestamp>/` (`config.json`, `run_meta.json`, `metrics.json`, `history.npz`, `split_indices.json` when the pipeline holds epochs out, optional `model.pt` or `model.joblib` for SVM). `config.json`, `split_indices.json`, and `run_meta.json` are written **before** training starts, so an interrupted run still leaves a readable record; `run_meta.status` is `running` → `completed` or `failed` (with `error`). Run directories are never reused — a second run started in the same second gets a `_2` suffix instead of overwriting the first.
+
+**Best-epoch checkpointing.** `metrics.json` reports the best validation epoch, and `model.pt` holds that epoch's weights — the two always agree. `train.checkpoint_metric` defaults to **`brier`** (lower is better); alternatives are `balanced_accuracy` / `accuracy` / `f1` / `val_loss` / `last`. Ties go to the later epoch, so a metric sitting on a plateau keeps the most-trained weights rather than the first ones. `SequenceClassifier` reports selection accuracy only, so `balanced_accuracy` / `f1` resolve to `accuracy` there — the effective choice is recorded in `run_meta.checkpoint_metric` alongside `best_epoch`. Set `"checkpoint_metric": "last"` for the old final-epoch behaviour. Selecting an epoch on validation data makes those validation metrics mildly optimistic; the speller benchmark is unaffected because it scores a holdout training never sees.
+
+Brier is the default because it keeps ranking epochs while a P300 model still predicts all-negative: accuracy then sits at the majority rate and balanced accuracy at exactly 0.5. On a real Samara subject, balanced accuracy was `0.5000` for every epoch while Brier went `0.1333 → 0.1179 → 0.1163 → 0.1166 → 0.1153`.
+
+Configs reject unknown keys (`extra="forbid"`): a misspelled or misplaced field fails validation instead of silently changing the experiment. Set the split seed in exactly one place — `split.seed` and `data.params.seed` conflicting is an error, not a silent override.
 
 Programmatic:
 
@@ -206,7 +225,14 @@ Point `data.params.path` / `output_dir` at Drive mounts. Use `"device": "cuda"` 
 ## Repo map
 
 ```text
-pattern_recognition/   # installable package (data, models, training, experiment, reporting)
+pattern_recognition/
+  selections/          # shared paradigm layer: grids, protocols, packing, decode
+  data/                # loaders, splits, pipelines (registry-driven)
+  models/              # CNN / GNN / sklearn model registry
+  training/            # loops, metrics, best-epoch checkpointing, device
+  experiment/          # config schema + run_experiment + CLI
+  speller/             # character-level benchmark (depends on all of the above)
+  reporting/           # read run artifacts -> tables and plots
 configs/               # example JSON experiment configs
 notebooks/examples/    # thin runner + reporting demo
 notebooks/             # historical GNN / SEED research notebooks

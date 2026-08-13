@@ -9,8 +9,9 @@ from statsmodels.stats.proportion import proportion_confint
 from torch import optim
 from torch.optim.lr_scheduler import StepLR
 
-from pattern_recognition.losses import GraphLoss
-from pattern_recognition.training.metrics import compute_itr
+from pattern_recognition.losses import BrierLoss, GraphLoss
+from pattern_recognition.training.checkpoint import BINARY_METRICS
+from pattern_recognition.training.metrics import brier_score, compute_itr
 
 
 def validate_model(model, dataloader, is_binary=True, device="cpu"):
@@ -18,6 +19,7 @@ def validate_model(model, dataloader, is_binary=True, device="cpu"):
     model.eval()
 
     running_corrects = 0
+    all_probs, all_targets = [], []
     if is_binary:
         running_TP, running_TN, running_FP, running_FN = 0, 0, 0, 0
 
@@ -28,6 +30,8 @@ def validate_model(model, dataloader, is_binary=True, device="cpu"):
 
         _, preds = torch.max(outputs, 1)
         _, true_y = torch.max(labels.data, 1)
+        all_probs.append(BrierLoss.probabilities(outputs).detach().cpu().numpy())
+        all_targets.append(labels.detach().cpu().numpy())
 
         if is_binary:
             P = torch.sum(preds)
@@ -73,6 +77,7 @@ def validate_model(model, dataloader, is_binary=True, device="cpu"):
         "Corrects": running_corrects.cpu().item(),
         "Min Accuracy": min_acc,
         "Max Accuracy": max_acc,
+        "Brier": brier_score(np.concatenate(all_probs), np.concatenate(all_targets)),
     }
     if is_binary:
         acc["Balanced Accuracy"] = bc
@@ -90,8 +95,17 @@ def train_model(
     device="cpu",
     log_rate=None,
     val_rate=1,
+    checkpoint=None,
 ):
+    """Train a CNN/GNN model.
+
+    ``checkpoint`` is an optional :class:`~pattern_recognition.training.
+    checkpoint.BestCheckpoint`; when given, the model is left holding the
+    weights from its best validation epoch instead of the last one.
+    """
     since = time.time()
+    if checkpoint is not None:
+        checkpoint.for_loop(BINARY_METRICS if is_binary else frozenset({"val_loss"}))
 
     optimizer = optim.AdamW(
         model.parameters(),
@@ -114,6 +128,7 @@ def train_model(
     ) = [], [], [], [], []
     val_min_acc_history, val_max_acc_history = [], []
     val_itr_history = []
+    val_brier_history = []
 
     for epoch in range(learning_params["num_epochs"]):
         do_val = (
@@ -129,6 +144,8 @@ def train_model(
 
             running_loss = 0.0
             running_corrects = 0
+            epoch_probs: list[np.ndarray] = []
+            epoch_targets: list[np.ndarray] = []
             if is_binary:
                 running_ones = 0
                 running_TP, running_TN, running_FP, running_FN = 0, 0, 0, 0
@@ -172,6 +189,10 @@ def train_model(
 
                 running_loss += loss.item() * inputs_size
                 running_corrects += torch.sum(preds == true_y)
+                epoch_probs.append(
+                    BrierLoss.probabilities(outputs).detach().cpu().numpy()
+                )
+                epoch_targets.append(labels.detach().cpu().numpy())
 
                 if is_binary:
                     running_ones += P
@@ -217,6 +238,9 @@ def train_model(
             epoch_itr = (
                 compute_itr(epoch_acc.cpu().item(), n_classes=2) if is_binary else 0.0
             )
+            epoch_brier = brier_score(
+                np.concatenate(epoch_probs), np.concatenate(epoch_targets)
+            )
 
             if (log_rate is not None) and (epoch + 1) % log_rate == 0:
                 if phase == "train":
@@ -252,12 +276,29 @@ def train_model(
                 val_loss_history.append(epoch_loss)
                 val_min_acc_history.append(min_acc)
                 val_max_acc_history.append(max_acc)
+                val_brier_history.append(epoch_brier)
                 if is_binary:
                     val_f1_history.append(epoch_f1.cpu())
                     val_bc_history.append(epoch_bc.cpu())
                     val_itr_history.append(epoch_itr)
 
+                if checkpoint is not None:
+                    ranked = {
+                        "accuracy": float(epoch_acc),
+                        "val_loss": float(epoch_loss),
+                        "brier": epoch_brier,
+                    }
+                    if is_binary:
+                        ranked["balanced_accuracy"] = float(epoch_bc)
+                        ranked["f1"] = float(epoch_f1)
+                    checkpoint.update(
+                        len(val_acc_history) - 1, ranked.get(checkpoint.metric), model
+                    )
+
         scheduler.step()
+
+    if checkpoint is not None:
+        checkpoint.restore(model)
 
     time_elapsed = time.time() - since
     print(
@@ -266,23 +307,17 @@ def train_model(
         )
     )
 
+    acc = {
+        "Accuracy": np.array(val_acc_history),
+        "Corrects": np.array(val_corrects_history),
+        "Min Accuracy": np.array(val_min_acc_history),
+        "Max Accuracy": np.array(val_max_acc_history),
+        "Brier": np.array(val_brier_history),
+    }
     if is_binary:
-        acc = {
-            "Accuracy": np.array(val_acc_history),
-            "Corrects": np.array(val_corrects_history),
-            "Min Accuracy": np.array(val_min_acc_history),
-            "Max Accuracy": np.array(val_max_acc_history),
-            "Balanced Accuracy": np.array(val_bc_history),
-            "F1-score": np.array(val_f1_history),
-            "ITR": np.array(val_itr_history),
-        }
-    else:
-        acc = {
-            "Accuracy": np.array(val_acc_history),
-            "Corrects": np.array(val_corrects_history),
-            "Min Accuracy": np.array(val_min_acc_history),
-            "Max Accuracy": np.array(val_max_acc_history),
-        }
+        acc["Balanced Accuracy"] = np.array(val_bc_history)
+        acc["F1-score"] = np.array(val_f1_history)
+        acc["ITR"] = np.array(val_itr_history)
 
     return np.array(val_loss_history), acc, time_elapsed
 

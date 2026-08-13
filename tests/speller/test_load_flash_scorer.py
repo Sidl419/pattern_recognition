@@ -4,8 +4,8 @@ import numpy as np
 import pattern_recognition.models  # noqa: F401 — register models
 import pytest
 from pattern_recognition.experiment import run_experiment
+from pattern_recognition.selections.types import Selection
 from pattern_recognition.speller.benchmark import load_flash_scorer_from_run
-from pattern_recognition.speller.types import Selection
 
 
 def _binary_run(tmp_path: Path) -> Path:

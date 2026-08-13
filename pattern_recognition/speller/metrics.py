@@ -4,9 +4,9 @@ from collections.abc import Callable
 
 import numpy as np
 
-from pattern_recognition.speller.grids import GridSpec
+from pattern_recognition.selections.grids import GridSpec
+from pattern_recognition.selections.types import Selection
 from pattern_recognition.speller.online import DecodeMode, online_decode
-from pattern_recognition.speller.types import Selection
 from pattern_recognition.training.metrics import compute_itr
 
 ScoreFn = Callable[[Selection, int], np.ndarray]

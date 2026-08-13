@@ -1,11 +1,11 @@
 import numpy as np
-from pattern_recognition.speller.decode import decode_single_flash
-from pattern_recognition.speller.grids import SAMARA_GRID
+from pattern_recognition.selections.decode import decode_single_flash
+from pattern_recognition.selections.grids import SAMARA_GRID
+from pattern_recognition.selections.types import Selection
 from pattern_recognition.speller.metrics import (
     evaluate_selections,
     selection_duration_s,
 )
-from pattern_recognition.speller.types import Selection
 from pattern_recognition.training.metrics import compute_itr
 
 

@@ -93,6 +93,7 @@ def test_metrics_table_two_runs(tmp_path):
         "accuracy",
         "balanced_accuracy",
         "f1",
+        "brier",
         "itr",
         "train_time_sec",
         "model.name",

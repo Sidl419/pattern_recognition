@@ -27,17 +27,32 @@ jobs:
       - name: Configure Poetry
         run: poetry config virtualenvs.in-project true
 
+      - name: Read locked Torch version
+        id: torch
+        run: |
+          TORCH_VERSION=$(python3 -c "
+          import re
+          from pathlib import Path
+          text = Path('poetry.lock').read_text()
+          match = re.search(r'(?m)^name = \"torch\"\nversion = \"([^\"]+)\"', text)
+          if not match:
+              raise SystemExit('torch not found in poetry.lock')
+          print(match.group(1))
+          ")
+          echo "version=${TORCH_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Locked torch: ${TORCH_VERSION}"
+
       - name: Install CPU PyTorch
         run: |
           poetry env use 3.11
           poetry run pip install --upgrade pip
-          poetry run pip install torch==2.0.0 --index-url https://download.pytorch.org/whl/cpu
+          poetry run pip install "torch==${{ steps.torch.outputs.version }}+cpu" --index-url https://download.pytorch.org/whl/cpu
 
       - name: Install project dependencies
         run: |
           poetry install --with dev --no-interaction
           # Poetry may pull a non-CPU torch wheel; pin CPU torch again.
-          poetry run pip install --force-reinstall torch==2.0.0 --index-url https://download.pytorch.org/whl/cpu
+          poetry run pip install --force-reinstall "torch==${{ steps.torch.outputs.version }}+cpu" --index-url https://download.pytorch.org/whl/cpu
 
       - name: Install torch-geometric (best effort)
         id: pyg
@@ -45,7 +60,7 @@ jobs:
         run: |
           poetry run pip install "torch-geometric>=2.3.0,<3"
           poetry run pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv \
-            -f https://data.pyg.org/whl/torch-2.0.0+cpu.html
+            -f "https://data.pyg.org/whl/torch-${{ steps.torch.outputs.version }}+cpu.html"
 
       - name: Show environment
         run: |

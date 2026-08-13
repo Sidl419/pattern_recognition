@@ -14,18 +14,14 @@ from pattern_recognition.data.averaging import (
     multichannel_to_single_channel,
     standardize_per_sample,
 )
+from pattern_recognition.data.bci3_prep import (
+    DEFAULT_TEST_A_CHARS,
+    DEFAULT_TEST_B_CHARS,
+)
 from pattern_recognition.data.datasets import CNNMatrixDataset
 from pattern_recognition.data.p300 import P300Getter
 from pattern_recognition.data.pipelines.base import DatasetBundle
 from pattern_recognition.data.pipelines.registry import register_pipeline
-
-# Known target character string for Subject A test set (labels hidden in .mat).
-DEFAULT_TEST_A_CHARS = list(
-    "WQXPLZCOMRKO97YFZDEZ1DPI9NNVGRQDJCUVRMEUOOOJD2UFYPOO6J7LDGYEGOA5VHNEHBTXOO1TDOILUEE5BFAEEXAW_K4R3MRU"
-)
-DEFAULT_TEST_B_CHARS = list(
-    "MERMIROOMUHJPXJOHUVLEORWRJBTJGGCIFSCGGLFSLEZWNPMPKEZSYSENDWPBDUUJIXZETUZCWOJQQRTVXBMZWHSWPRQDZEQRCOQZ"
-)
 
 
 @register_pipeline("BCI3PzEpochAverage")

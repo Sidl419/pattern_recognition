@@ -13,6 +13,7 @@ _METRIC_KEYS = (
     "accuracy",
     "balanced_accuracy",
     "f1",
+    "brier",
     "itr",
     "train_time_sec",
 )

@@ -1,10 +1,33 @@
-matrix_dataset
 .ipynb_checkpoints
 __pycache__
-Preprocessed_EEG
-processed_data_multi_data
 .*
 !.github/
 !.cursor/
 China_information.xlsx
+
+# Raw / derived EEG dumps — never commit (see AGENTS.md)
+matrix_dataset
+Samara_data/
+raw_data/
+processed_data/
+processed_data_multi_data
+Preprocessed_EEG
+*.mat
+
+# Run outputs
 results/
+
+# Analytical reports
+reports/
+latex/
+
+
+# LaTeX build artifacts
+*.aux
+*.fls
+*.log
+*.synctex
+*.synctex(busy)
+*.fdb_latexmk
+*.out
+*.toc

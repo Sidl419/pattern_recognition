@@ -1,10 +1,8 @@
 """Samara selection packing / simulation helpers."""
 
 import numpy as np
-from pattern_recognition.speller.simulate import (
-    simulate_samara_selections,
-    stratified_epoch_holdout,
-)
+from pattern_recognition.data.splits import stratified_epoch_holdout
+from pattern_recognition.selections.simulate import simulate_samara_selections
 
 
 def test_simulate_no_reuse_within_selection_and_seed_stable():

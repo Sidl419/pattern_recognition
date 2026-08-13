@@ -1,11 +1,16 @@
 import numpy as np
 import torch
-from pattern_recognition.speller.decode import (
+from pattern_recognition.selections.decode import (
     decode_from_sequence_output,
     decode_rowcol,
     decode_single_flash,
 )
-from pattern_recognition.speller.grids import BCI3_GRID, COL_CODE, ROW_CODE, SAMARA_GRID
+from pattern_recognition.selections.grids import (
+    BCI3_GRID,
+    COL_CODE,
+    ROW_CODE,
+    SAMARA_GRID,
+)
 
 
 def test_decode_rowcol_from_sequence_logits():

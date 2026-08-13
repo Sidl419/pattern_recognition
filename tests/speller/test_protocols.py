@@ -1,12 +1,12 @@
 import numpy as np
 import pytest
-from pattern_recognition.speller.grids import (
+from pattern_recognition.selections.grids import (
     BCI3_GRID,
     COL_CODE,
     ROW_CODE,
     SAMARA_GRID,
 )
-from pattern_recognition.speller.protocols import get_protocol
+from pattern_recognition.selections.protocols import get_protocol
 
 
 def test_get_protocol_bci3_rowcol():
@@ -86,7 +86,7 @@ def test_samara_build_selections_from_pools():
 
 
 def test_samara_decode_via_protocol():
-    from pattern_recognition.speller.types import Selection
+    from pattern_recognition.selections.types import Selection
 
     proto = get_protocol("samara_single_flash_sim")
     j = SAMARA_GRID.index_of("J")

@@ -57,7 +57,9 @@ def test_prepare_bci3_pz_flashes_matches_pipeline_channel_stats():
     reason="BCI3 mats missing",
 )
 def test_speller_bci3_builder_uses_scaler_path():
-    from pattern_recognition.speller.data_loading import build_bci3_selections_from_mat
+    from pattern_recognition.data.selection_loading import (
+        build_bci3_selections_from_mat,
+    )
 
     sels = build_bci3_selections_from_mat(
         BCI3_TEST,

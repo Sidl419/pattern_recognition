@@ -6,7 +6,6 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from sklearn.model_selection import train_test_split
 
 from pattern_recognition.data.averaging import (
     build_multichannel_subject_dataset_unique,
@@ -15,8 +14,12 @@ from pattern_recognition.data.averaging import (
 from pattern_recognition.data.datasets import CNNMatrixDataset
 from pattern_recognition.data.pipelines.base import DatasetBundle
 from pattern_recognition.data.pipelines.registry import register_pipeline
-from pattern_recognition.data.splits import three_way_epoch_split
-from pattern_recognition.data.time_shift import load_p300_subjects
+from pattern_recognition.data.samara import (
+    as_split_indices,
+    load_samara_subjects,
+    subject_epoch_splits,
+)
+from pattern_recognition.data.splits import subject_seed
 
 
 @register_pipeline("SamaraWithinSubjectAverage")
@@ -80,62 +83,34 @@ class SamaraWithinSubjectAverage:
         self.subject = subject
 
     def build(self) -> DatasetBundle:
-        resolved = Path(self.path).expanduser().resolve()
-        if not resolved.is_dir():
-            raise FileNotFoundError(f"Samara data path not found: {resolved}")
-
-        data, labels = load_p300_subjects(
-            str(resolved),
+        data, labels, subjects = load_samara_subjects(
+            self.path,
             channel_idx=self.channel_idx,
-            standardize=True,
             file_pattern=self.file_pattern,
+            subject=self.subject,
         )
-        if not data:
-            raise FileNotFoundError(
-                f"No files matching {self.file_pattern!r} under {resolved}"
-            )
-
-        subjects = sorted(data.keys())
-        if self.subject is not None:
-            if self.subject not in data:
-                raise KeyError(f"Subject {self.subject!r} not in loaded set {subjects}")
-            subjects = [self.subject]
+        resolved = Path(self.path).expanduser().resolve()
+        splits = subject_epoch_splits(
+            labels,
+            subjects,
+            seed=self.seed,
+            epoch_holdout=self.epoch_holdout,
+            val_fraction=self.val_fraction,
+            stratify=self.stratify,
+        )
 
         train_X_parts: list[torch.Tensor] = []
         train_y_parts: list[torch.Tensor] = []
         val_X_parts: list[torch.Tensor] = []
         val_y_parts: list[torch.Tensor] = []
-        split_indices: dict[str, dict[str, list[int]]] = {}
 
-        for i, subj in enumerate(subjects):
+        for subj in subjects:
             x = np.asarray(data[subj][:, : self.epoch_len], dtype=np.float32)
             y = np.asarray(labels[subj], dtype=np.int64)
-            subj_seed = self.seed + i
-
-            if self.epoch_holdout > 0.0:
-                train_idx, val_idx, eval_idx = three_way_epoch_split(
-                    y,
-                    epoch_holdout=self.epoch_holdout,
-                    val_fraction=self.val_fraction,
-                    seed=subj_seed,
-                    stratify=self.stratify,
-                )
-                x_tr, y_tr = x[train_idx], y[train_idx]
-                x_va, y_va = x[val_idx], y[val_idx]
-                split_indices[subj] = {
-                    "train": train_idx.astype(int).tolist(),
-                    "val": val_idx.astype(int).tolist(),
-                    "eval": eval_idx.astype(int).tolist(),
-                }
-            else:
-                x_tr, x_va, y_tr, y_va = train_test_split(
-                    x,
-                    y,
-                    test_size=self.val_fraction,
-                    shuffle=True,
-                    random_state=subj_seed,
-                    stratify=(y if self.stratify and len(np.unique(y)) > 1 else None),
-                )
+            subj_seed = subject_seed(self.seed, subj)
+            train_idx, val_idx = splits[subj]["train"], splits[subj]["val"]
+            x_tr, y_tr = x[train_idx], y[train_idx]
+            x_va, y_va = x[val_idx], y[val_idx]
 
             X_tr, y_tr_t = build_multichannel_subject_dataset_unique(
                 x_tr, y_tr, n_channels=self.n_average, seed=subj_seed
@@ -174,8 +149,8 @@ class SamaraWithinSubjectAverage:
             "n_train": len(train_ds),
             "n_val": len(val_ds),
         }
-        if split_indices:
-            metadata["split_indices"] = split_indices
+        if self.epoch_holdout > 0.0:
+            metadata["split_indices"] = as_split_indices(splits)
         return DatasetBundle(
             train=train_ds,
             val=val_ds,

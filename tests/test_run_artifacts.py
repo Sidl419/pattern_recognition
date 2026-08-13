@@ -7,8 +7,11 @@ REQUIRED_METRICS = {
     "accuracy",
     "balanced_accuracy",
     "f1",
+    "brier",
     "itr",
     "train_time_sec",
+    "best_epoch",
+    "checkpoint_metric",
     "device_requested",
     "device_resolved",
 }
@@ -19,6 +22,9 @@ REQUIRED_META = {
     "device_requested",
     "device_resolved",
     "name",
+    "status",
+    "checkpoint_metric",
+    "best_epoch",
 }
 
 

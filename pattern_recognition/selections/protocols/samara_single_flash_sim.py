@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import numpy as np
 
-from pattern_recognition.speller.decode import decode_single_flash
-from pattern_recognition.speller.grids import SAMARA_GRID, GridSpec
-from pattern_recognition.speller.protocols.base import register_protocol
-from pattern_recognition.speller.simulate import (
-    simulate_samara_selections,
-    stratified_epoch_holdout,
-)
-from pattern_recognition.speller.types import Selection
+from pattern_recognition.data.splits import stratified_epoch_holdout
+from pattern_recognition.selections.decode import decode_single_flash
+from pattern_recognition.selections.grids import SAMARA_GRID, GridSpec
+from pattern_recognition.selections.protocols.base import register_protocol
+from pattern_recognition.selections.simulate import simulate_samara_selections
+from pattern_recognition.selections.types import Selection
 
 
 @register_protocol("samara_single_flash_sim")
