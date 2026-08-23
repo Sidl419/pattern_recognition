@@ -176,7 +176,7 @@ print(run.metrics)
 
 ### Colab
 
-Colab uses **Python 3.12**. Core install accepts Colab’s Torch and NumPy 2.x — one command:
+Colab uses **Python 3.13**. Core install accepts Colab’s Torch and NumPy 2.x — one command:
 
 ```python
 from google.colab import drive

@@ -7,8 +7,8 @@ readme = "README.md"
 packages = [{include = "pattern_recognition"}]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.13"
-# Loose pins so Colab (Py 3.12 + system Torch/NumPy 2.x) can `pip install` in one command.
+python = ">=3.10,<3.14"
+# Loose pins so Colab (Py 3.13 + system Torch/NumPy 2.x) can `pip install` in one command.
 torch = ">=2.0.0,<3.0.0"
 numpy = ">=1.24.2,<3"
 # 1.8+ dropped pkg_resources; keep <2 so Colab can still resolve a current 1.x.
